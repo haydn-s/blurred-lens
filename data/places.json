@@ -1,0 +1,10 @@
+[
+  {"id": "city",    "label": "City",       "phrase": "a city"},
+  {"id": "town",    "label": "Town",       "phrase": "a town"},
+  {"id": "village", "label": "Village",    "phrase": "a village"},
+  {"id": "suburb",  "label": "Suburb",     "phrase": "a suburb"},
+  {"id": "rural",   "label": "Rural area", "phrase": "a rural area"},
+  {"id": "farm",    "label": "Farm",       "phrase": "a farm"},
+  {"id": "house",   "label": "House",      "phrase": "a house"},
+  {"id": "market",  "label": "Market",     "phrase": "a market"}
+]

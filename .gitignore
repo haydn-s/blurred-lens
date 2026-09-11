@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Generated (large; rebuild with the pipeline -- see README)
+outputs/
+web/data/
+
+# macOS
+.DS_Store

@@ -1,0 +1,42 @@
+# Blurred Lens configuration. Secrets (API keys) go in .env, never here.
+
+[prompts]
+# {place} is filled from data/places.json ("phrase"), {country} from data/countries.json ("prompt_name").
+template = "Show me {place} in {country}."
+countries_file = "data/countries.json"
+places_file = "data/places.json"
+
+[generation]
+# Output folder under outputs/. Start a new name whenever you change the model, template
+# or size, so images from different setups are never averaged together.
+run_name = "v1"
+images_per_prompt = 1000
+
+# Any OpenAI-compatible /images/generations endpoint works.
+# Duke AI Gateway: as of 2026-09-10 it serves NO image models (see README).
+base_url = "https://litellm.oit.duke.edu/v1"
+api_key_env = "DUKE_AI_API_KEY"
+model = ""                    # required before generating, e.g. "gpt-image-1-mini"
+# OpenAI directly (paid; put OPENAI_API_KEY in .env):
+# base_url = "https://api.openai.com/v1"
+# api_key_env = "OPENAI_API_KEY"
+# model = "gpt-image-1-mini"
+
+size = "1024x1024"
+quality = "low"               # gpt-image-*: low | medium | high    dall-e-3: standard | hd
+images_per_request = 1        # the API's `n`: gpt-image-* allow up to 10, dall-e-3 only 1
+concurrency = 4               # requests in flight at once
+requests_per_minute = 20      # client-side throttle; Duke keys are capped at 20/min
+price_per_image_usd = 0.0     # from your provider's price list; used for cost estimates
+save_format = "jpeg"          # jpeg | webp | png (png is ~6x larger on disk)
+
+[composite]
+width = 512                   # images are resized to this width before averaging
+
+[site]
+samples_per_prompt = 8        # individual images shown per prompt on the website
+thumbnail_size = 256
+
+[paths]
+outputs_dir = "outputs"
+site_data_dir = "web/data"
