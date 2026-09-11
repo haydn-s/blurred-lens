@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>About · Blurred Lens</title>
+  <meta name="description" content="About Blurred Lens, an Explainable AI project that averages many AI-generated images of places in every country into single composites.">
+  <meta name="theme-color" content="#04060c">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="project_description.md" as="fetch" crossorigin>
+
+  <script type="importmap">
+    { "imports": { "marked": "https://cdn.jsdelivr.net/npm/marked@18.0.12/lib/marked.esm.js" } }
+  </script>
+  <script type="module" src="js/about.js"></script>
+</head>
+<body class="page-about">
+  <div class="about-glow" aria-hidden="true"></div>
+
+  <header class="about-bar">
+    <a class="brand" href="./">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Blurred Lens</span>
+    </a>
+    <a class="pill-button glass" href="./">
+      Explore the globe
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </header>
+
+  <main class="about-main">
+    <!-- Filled in from project_description.md by js/about.js; edit that file, not this one. -->
+    <article id="about-content" class="prose" aria-busy="true">
+      <p class="about-status">Loading…</p>
+    </article>
+    <noscript><p class="about-status">This page needs JavaScript to display <a href="project_description.md">project_description.md</a>.</p></noscript>
+  </main>
+
+  <footer class="about-footer">
+    <span>Blurred Lens · AIPI 590: Explainable AI, Duke University</span>
+    <a class="site-link" href="https://github.com/haydn-s/blurred-lens" target="_blank" rel="noopener noreferrer">
+      View the code on GitHub
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M9.5 8H16v6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="visually-hidden">(opens in a new tab)</span>
+    </a>
+  </footer>
+</body>
+</html>

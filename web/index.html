@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Blurred Lens · How an AI image model sees the world</title>
+  <meta name="description" content="An interactive globe of AI-generated composites: what an image model draws when asked to show a city, a farm or a house in every country, averaged into one image.">
+  <meta name="theme-color" content="#04060c">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json" as="fetch" crossorigin>
+
+  <!--
+    No build step: modules load straight from CDNs. globe.gl comes as one bundle that leaves
+    "three" as a bare import, so this map gives the whole page a single copy of three.js
+    (the bloom pass must share the renderer's copy). Upgrade the versions together.
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "globe.gl": "https://esm.sh/globe.gl@2.46.2?bundle&external=three",
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js",
+        "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.webgpu.min.js",
+        "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.tsl.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/",
+        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/",
+        "d3-geo": "https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/+esm",
+        "topojson-client": "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"
+      }
+    }
+  </script>
+  <link rel="modulepreload" href="https://esm.sh/globe.gl@2.46.2?bundle&external=three">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.core.min.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div id="globe" class="globe"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <div class="chrome">
+    <header class="masthead">
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Blurred Lens</span>
+      </a>
+      <p class="tagline">What an AI image model draws when asked to picture places in every country, averaged into a single image.</p>
+    </header>
+
+    <div class="search" role="search">
+      <label class="search-field glass">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-4.2-4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="visually-hidden">Search countries</span>
+        <input id="search-input" type="search" placeholder="Search countries" autocomplete="off" spellcheck="false"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results">
+        <kbd aria-hidden="true">/</kbd>
+      </label>
+      <ul id="search-results" class="search-results" role="listbox" aria-label="Countries" hidden></ul>
+    </div>
+
+    <footer class="hud">
+      <div>
+        <p class="hud-prompt">Prompt <span id="hud-template">…</span></p>
+        <p class="hud-stats" id="hud-stats"></p>
+      </div>
+      <div class="hud-side">
+        <p class="hud-hint">
+          <span class="hint-set hint-pointer"><span>Drag to rotate</span><span>Scroll to zoom</span><span>Click a country</span></span>
+          <span class="hint-set hint-touch"><span>Drag to rotate</span><span>Pinch to zoom</span><span>Tap a country</span></span>
+        </p>
+        <nav class="hud-links" aria-label="Project">
+          <a class="site-link" href="about.html">About the project</a>
+          <a class="site-link" href="https://github.com/haydn-s/blurred-lens" target="_blank" rel="noopener noreferrer">
+            GitHub
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M9.5 8H16v6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="visually-hidden">(opens in a new tab)</span>
+          </a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <div id="tooltip" class="tooltip glass" aria-hidden="true">
+    <span class="tooltip-name"></span>
+    <span class="tooltip-meta"></span>
+  </div>
+
+  <section id="gallery" class="gallery" role="dialog" aria-modal="true" aria-labelledby="gallery-title" hidden>
+    <div class="gallery-bar">
+      <button class="pill-button glass" type="button" data-action="close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Globe
+      </button>
+      <div class="segmented glass" role="group" aria-label="Composite">
+        <button type="button" data-method="mean" aria-pressed="true" title="Pixel-wise average of every image">Mean</button>
+        <button type="button" data-method="median" aria-pressed="false" title="Pixel-wise median: sharper, ignores outliers">Median</button>
+      </div>
+    </div>
+
+    <header class="gallery-head">
+      <p class="gallery-region"></p>
+      <h2 class="gallery-title" id="gallery-title"></h2>
+      <p class="gallery-summary"></p>
+    </header>
+
+    <div class="gallery-stage">
+      <button class="nav-button prev glass" type="button" data-action="prev" aria-label="Previous place">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <ol class="gallery-track" aria-label="Composite images"></ol>
+      <button class="nav-button next glass" type="button" data-action="next" aria-label="Next place">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+    <nav class="gallery-tabs" aria-label="Places"></nav>
+  </section>
+
+  <div id="loader" class="loader" role="status">
+    <span class="loader-ring" aria-hidden="true"></span>
+    <span class="loader-text">Loading the globe…</span>
+  </div>
+</body>
+</html>
