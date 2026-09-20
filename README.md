@@ -28,47 +28,74 @@ config.toml ─────────┘                               │
 | 3. Export | `python -m blurred_lens.export_site` | Copies composites and thumbnails, writes `web/data/manifest.json` (every prompt, generated or not). |
 | 4. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
 
-## ⚠️ Before generating: choose an image backend
+## Image backend: Replicate
 
-As of 2026-09-10 the **Duke AI Gateway** (`https://litellm.oit.duke.edu/v1`) serves 36 models (chat,
-embeddings, rerank, speech-to-text) but **no image-generation models**, and the key this project was
-set up with is capped at **$1/day** and **20 requests/minute**. `generate` has nothing to call until
-`generation.model` in `config.toml` names a working image model. Options:
+Generation runs on [Replicate](https://replicate.com). `generate` posts to
+`/v1/models/<owner>/<model>/predictions` with a `Prefer: wait` header, so a fast model usually answers
+on the first request and never needs polling. Replicate allows 600 prediction creations per minute;
+`requests_per_minute` throttles below that.
 
-1. **Ask Duke OIT or the course staff** to enable an image model on the gateway, and whether a course
-   fund code can lift the daily budget (the gateway supports fund codes for higher limits).
-2. **Use a paid provider** with an OpenAI-compatible images API (e.g. OpenAI's `gpt-image-*` models):
-   set `base_url`, `api_key_env`, `model` and `price_per_image_usd` in `config.toml`.
-3. **Run an open-weights model** (e.g. FLUX.1-schnell or SDXL-Turbo with Hugging Face `diffusers`) on a
-   GPU such as the Duke Compute Cluster. No per-image cost or rate limit, and white-box access to the
-   model, which enables XAI methods an API can't (e.g. cross-attention maps showing which pixels respond
-   to the country name). This needs a second backend in `generate.py` (not written yet).
+> **The API token decides which account pays.** Create it while switched to the organization that funds
+> the work (account menu → the organization → **API tokens**). A token made on a personal account bills
+> that person, not the organization.
 
-## Scale
+| Model | Per image | Notes |
+|---|---:|---|
+| `black-forest-labs/flux-schnell` | $0.003 | 1-4 steps, fastest and cheapest; the default here |
+| `black-forest-labs/flux-dev` | $0.025 | slower, usually follows the prompt more closely |
+| `black-forest-labs/flux-1.1-pro` | $0.04 | best of the FLUX line |
+| `recraft-ai/recraft-v3` | $0.04 | |
+| `ideogram-ai/ideogram-v3-quality` | $0.09 | |
 
-197 countries × 8 place types = **1,576 prompts**. At 1,000 images per prompt that is **1,576,000 images**.
+Prices from [replicate.com/pricing](https://replicate.com/pricing) — check it before you budget, and
+set `price_per_image_usd` to match the model you pick.
 
-| Images per prompt | Total images | Time at 20 requests/min | Cost at $0.01/image | Cost at $0.04/image |
+Every Replicate model has its own input schema, so a model's inputs live in `[generation.input]` in
+`config.toml` instead of in the code, and `count_param` names the input that asks for several images in
+one prediction (`num_outputs` for FLUX). Read a model's schema at
+`https://replicate.com/<owner>/<model>/api/schema` whenever you change models. Whatever the model
+returns is still saved at exactly `generation.size`, so composites line up across models.
+
+Setting `provider = "openai"` uses any OpenAI-compatible `/images/generations` endpoint instead
+(`base_url`, `api_key_env`, `model`, `quality`).
+
+## Scale and budget
+
+197 countries × 8 place types = **1,576 prompts**. Set `generation.budget_usd` (or pass `--budget`) and
+`generate` splits the budget evenly: every prompt gets the same number of images, as many as the budget
+buys, so every country and place gets a composite and all composites are built from equal samples.
+Images per prompt for all 1,576 prompts:
+
+| Budget | $0.003/image | $0.01/image | $0.04/image | $0.065/image |
 |---:|---:|---:|---:|---:|
-| 10 | 15,760 | 13 hours | $158 | $630 |
-| 100 | 157,600 | 5.5 days | $1,576 | $6,304 |
-| 1,000 | 1,576,000 | 55 days | $15,760 | $63,040 |
+| $250 | 52 | 15 | 3 | 2 |
+| $1,000 | 211 | 63 | 15 | 9 |
+| $2,500 | 528 | 158 | 39 | 24 |
+| $5,000 | 1,000 (cap) | 317 | 79 | 48 |
 
-The prices are illustrative. Check your provider's current pricing and set `price_per_image_usd` to get
-real estimates from `python -m blurred_lens.generate --dry-run`. On a $1/day budget even 10 images per
-prompt would take months. Start with a pilot (a few countries, ~5 images each) and scale up: the mean
-image changes less and less as N grows (per-pixel standard error shrinks as 1/√N), so a convergence
-check on pilot data can justify a smaller N than 1,000.
+```bash
+# What would $1,000 buy at the configured price, and at the other candidate prices?
+python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04,0.065
+```
+
+- **The budget is a total for the run** and counts images already on disk, so raising it later and
+  re-running tops every prompt up to a new, higher count. Nothing is spent beyond it.
+- **Too small a budget is refused:** if it buys fewer than `min_images_per_prompt` (default 20) per
+  prompt, `generate` says what that minimum would cost. Narrow the run (`--places`), pick a cheaper
+  model, or lower the minimum.
+- **How many images are enough?** The mean image changes less as N grows (per-pixel standard error
+  shrinks as 1/√N), and a fixed camera position (see [Data](#data)) lowers the spread between images, so
+  fewer are needed. Run a pilot, check how fast composites settle, and set the minimum from that.
 
 ## Setup
 
 ```bash
 uv venv .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
-cp .env.example .env    # then paste your API key into .env
+cp .env.example .env    # then paste your Replicate token into REPLICATE_API_TOKEN
 ```
 
-Then set `generation.model` (and the endpoint, if not Duke's) in `config.toml`.
+Then pick a model in `config.toml` — see [Image backend](#image-backend-replicate).
 
 ## Usage
 
@@ -78,6 +105,9 @@ python -m blurred_lens.generate --dry-run
 
 # Pilot: 3 countries × 2 places × 5 images
 python -m blurred_lens.generate --countries FRA,NGA,JPN --places city,farm --n 5
+
+# Budgeted run: $1,000 split evenly over every prompt (needs generation.price_per_image_usd)
+python -m blurred_lens.generate --budget 1000
 
 # Full run. Asks for confirmation; Ctrl+C stops cleanly; re-run the same command to resume.
 python -m blurred_lens.generate
@@ -139,8 +169,17 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 
 These are research decisions: review them and note your choices in the write-up.
 
-**`data/places.json`**: the `{place}` slot. Each entry has an `id` (folder name), a `label` (display),
-and a `phrase` with its article (*a city*, *a rural area*). Every place added means 197 more prompts.
+**`data/places.json`**: the `{place}` and `{view}` slots. Each entry has an `id` (folder name), a
+`label` (display), a `phrase` with its article (*a city*, *a rural area*), and a `view` that fixes the
+camera position for that kind of place (*taken at eye level from the middle of a street, looking
+straight down the street*). Every place added means 197 more prompts.
+
+The view is what makes one prompt's images comparable pixel by pixel. With the camera in the same
+place, the road, the horizon and the buildings land in about the same part of every frame, so the
+composite shows what the model puts there rather than a blur of different framings. The views pin
+down geometry only (eye level, where the camera stands, where it looks); time of day, weather, people
+and buildings are left to the model. This is a research decision too: the model no longer chooses the
+framing, only what fills it.
 
 Some combinations have no real-world referent (*a farm in Vatican City*, *a village in Singapore*).
 What the model does with them is itself a finding.
@@ -150,7 +189,7 @@ What the model does with them is itself a finding.
 ```
 outputs/<run_name>/                      # gitignored; one folder per model/prompt setup
   images/<ISO3>/<place>/0001.jpg …       # generated images
-  images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, time
+  images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, sizes, time
   failures.jsonl                         # errors and content-policy refusals
   composites/<ISO3>/<place>_mean.png     # and <place>_median.png
   composites/index.json                  # how many images went into each composite
@@ -159,13 +198,20 @@ web/data/                                # gitignored; rebuilt by export_site
 
 `revised_prompt` is kept because some models (e.g. DALL·E 3) rewrite the prompt before drawing, and that
 rewrite is part of how the model sees a place. Refusals are logged instead of retried forever: which
-prompts get refused is data too.
+prompts get refused is data too. `returned_size` records the size the model actually sent back: every
+image is saved at `generation.size`, and anything else is center-cropped and resized first, so a model
+that quietly ignores the requested size shows up in the metadata instead of in the composites.
 
 ## Design notes
 
 - **Breadth-first:** requests go out as image 1 of every prompt, then image 2, and so on. If a run stops
   early (budget, rate limit, Ctrl+C), every prompt has about the same number of images, so partial
   results are still comparable.
+- **One size, one view:** every image is saved at exactly `generation.size`, and each place fixes the
+  camera (`view` in `data/places.json`), so one prompt's images line up when they are averaged.
+- **The budget sets the sample size:** `--budget` (or `generation.budget_usd`) decides how many images
+  each prompt gets, not the other way round, and every prompt gets the same number, so coverage never
+  depends on where a run happened to stop.
 - **Resumable:** existing images are never regenerated. Re-run the same command to continue.
 - **Runs never mix:** change `generation.run_name` whenever you change the model, template or size.
 - **Mean vs. median:** the mean is the literal average (ghostly and blurred); the median is often sharper
@@ -176,6 +222,7 @@ prompts get refused is data too.
 ## Roadmap
 
 - [x] Scaffold: data files, config, generate / composite / export pipeline, map skeleton, tests
+- [x] Generation revised: one size and one camera view per prompt, budget-driven sample counts
 - [ ] Choose an image backend (see above) and run a pilot
 - [ ] Choose images-per-prompt from a convergence check on the pilot
 - [ ] Full generation run

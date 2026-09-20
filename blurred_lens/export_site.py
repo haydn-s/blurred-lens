@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 from .config import ROOT, image_files, load_config, run_dir
-from .prompts import load_json
+from .prompts import format_prompt, load_json
 
 METHODS = ("mean", "median")
 
@@ -55,7 +55,7 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> dict:
         for p in places:
             entry = {
                 "place": p["id"],
-                "prompt": template.format(place=p["phrase"], country=c["prompt_name"]),
+                "prompt": format_prompt(template, c, p),
                 "model": None,
                 "n_images": 0,
                 "composites": None,  # stays None until the prompt's composites are built

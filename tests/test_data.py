@@ -24,13 +24,17 @@ def test_one_prompt_per_country_place_pair():
     assert len(load_prompts(CFG)) == len(COUNTRIES) * len(PLACES)
 
 
-def test_prompt_text_uses_prompt_name():
+def test_every_place_has_a_camera_view():
+    assert all(p["view"].strip() for p in PLACES)
+
+
+def test_prompt_text_fills_country_place_and_view():
     [prompt] = build_prompts(
         [{"iso_a3": "USA", "prompt_name": "the United States"}],
-        [{"id": "city", "phrase": "a city"}],
-        "Show me {place} in {country}.",
+        [{"id": "city", "phrase": "a city", "view": "taken at eye level"}],
+        "A photograph of {place} in {country}, {view}.",
     )
-    assert prompt.text == "Show me a city in the United States."
+    assert prompt.text == "A photograph of a city in the United States, taken at eye level."
 
 
 def test_select_rejects_unknown_ids():
