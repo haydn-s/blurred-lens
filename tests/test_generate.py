@@ -77,12 +77,12 @@ def test_replicate_sends_the_prompt_with_the_model_inputs_and_keeps_every_image(
         "status": "succeeded", "output": ["https://out/1.jpg", "https://out/2.jpg"]}
     backend.download = lambda url: f"bytes of {url}".encode()
 
-    images = backend.generate("a city in Nigeria", 2)
+    result = backend.generate("a city in Nigeria", 2)
 
     url, body = sent[0]
     assert url.endswith("/models/owner/model/predictions")
     assert body["input"] == {"prompt": "a city in Nigeria", "aspect_ratio": "1:1", "num_outputs": 2}
-    assert [data for data, _ in images] == [b"bytes of https://out/1.jpg", b"bytes of https://out/2.jpg"]
+    assert [data for data, _ in result.images] == [b"bytes of https://out/1.jpg", b"bytes of https://out/2.jpg"]
 
 
 def test_replicate_polls_until_the_prediction_finishes(monkeypatch):
@@ -96,7 +96,7 @@ def test_replicate_polls_until_the_prediction_finishes(monkeypatch):
     backend.request = lambda url, body=None: next(replies)
     backend.download = lambda url: b"image"
 
-    assert backend.generate("a city in Nigeria", 1) == [(b"image", None)]
+    assert backend.generate("a city in Nigeria", 1).images == [(b"image", None)]
 
 
 def test_replicate_safety_rejection_is_a_refusal_but_other_failures_are_not(monkeypatch):
@@ -130,3 +130,21 @@ def test_replicate_sends_a_user_agent_and_the_wait_header(monkeypatch):
         assert headers["user-agent"] == generate.USER_AGENT
     assert {name.lower() for name in captured[0].headers}.issuperset({"authorization", "prefer"})
     assert captured[0].headers["Prefer"] == "wait=60"
+
+
+def test_replicate_reports_the_version_and_prediction_id_for_the_log(monkeypatch):
+    """Provenance rides alongside the images, to be logged rather than stored per image."""
+    backend = replicate_backend(monkeypatch)
+    backend.request = lambda url, body=None: {
+        "status": "succeeded", "output": ["https://out/1.jpg"], "id": "pred_123",
+        "model": "black-forest-labs/flux-schnell", "version": "c846a699",
+        "metrics": {"predict_time": 1.25},
+    }
+    backend.download = lambda url: b"image"
+
+    info = backend.generate("a city in Nigeria", 1).info
+
+    assert info["prediction_id"] == "pred_123"
+    assert info["version"] == "c846a699"
+    assert info["predict_time"] == 1.25
+    assert info["provider"] == "replicate"

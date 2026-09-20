@@ -72,6 +72,18 @@ class Job:
     indices: list[int]
 
 
+@dataclass
+class Generated:
+    """What one API call returned: the images, and what the provider said about the call itself.
+
+    `info` describes the call (which model version answered, how long it took), not the picture, so
+    it is logged to predictions.jsonl rather than written into each image's metadata.
+    """
+
+    images: list[tuple[bytes, str | None]]  # (image bytes, revised prompt)
+    info: dict
+
+
 def existing_indices(folder: Path) -> set[int]:
     if not folder.is_dir():
         return set()
@@ -222,7 +234,17 @@ class ReplicateBackend:
         if not urls:
             raise RuntimeError("prediction succeeded but returned no image")
         # Replicate deletes prediction outputs after an hour, so download them now.
-        return [(self.download(url), None) for url in urls]
+        return Generated(
+            images=[(self.download(url), None) for url in urls],
+            info={
+                "provider": "replicate",
+                "model": prediction.get("model") or self.model,
+                "version": prediction.get("version"),
+                "prediction_id": prediction.get("id"),
+                "predict_time": (prediction.get("metrics") or {}).get("predict_time"),
+                "prediction_created_at": prediction.get("created_at"),
+            },
+        )
 
     def request(self, url: str, body: dict | None = None) -> dict:
         """POST (with a body) or GET, retrying rate limits, timeouts and server errors."""
@@ -285,7 +307,8 @@ class OpenAIBackend:
         if g["model"].startswith("dall-e"):
             kwargs["response_format"] = "b64_json"  # gpt-image models always return base64 and reject this
         try:
-            items = self.client.images.generate(**kwargs).data or []
+            response = self.client.images.generate(**kwargs)
+            items = response.data or []
         except self.FATAL as exc:
             raise FatalError(str(exc)) from None
         except openai.BadRequestError as exc:
@@ -301,7 +324,11 @@ class OpenAIBackend:
             else:
                 continue
             results.append((data, item.revised_prompt))
-        return results
+        usage = getattr(response, "usage", None)
+        return Generated(images=results, info={
+            "provider": "openai", "model": g["model"],
+            "usage": usage.model_dump() if hasattr(usage, "model_dump") else usage,
+        })
 
 
 BACKENDS = {"replicate": ReplicateBackend, "openai": OpenAIBackend}
@@ -349,13 +376,13 @@ def run(jobs: list[Job], backend, g: dict, out: Path) -> None:
             f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
 
     def do_job(job: Job) -> int:
-        images = backend.generate(job.prompt.text, len(job.indices))
+        result = backend.generate(job.prompt.text, len(job.indices))
         folder = out / "images" / job.prompt.iso3 / job.prompt.place
         folder.mkdir(parents=True, exist_ok=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
         records = []
         size = parse_size(g["size"])
-        for index, (data, revised_prompt) in zip(job.indices, images):
+        for index, (data, revised_prompt) in zip(job.indices, result.images):
             name = f"{index:04d}.{EXTENSIONS[fmt]}"
             returned_size = save_image(data, folder / name, fmt, size)
             records.append({
@@ -365,6 +392,10 @@ def run(jobs: list[Job], backend, g: dict, out: Path) -> None:
                 "created_at": created,
             })
         append_jsonl(folder / "metadata.jsonl", records)
+        append_jsonl(out / "predictions.jsonl", [{
+            "at": created, "country": job.prompt.iso3, "place": job.prompt.place,
+            "indices": job.indices, "saved": len(records), **result.info,
+        }])
         return len(records)
 
     def log_failure(job: Job, exc: Exception) -> None:

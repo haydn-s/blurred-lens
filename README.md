@@ -191,10 +191,15 @@ outputs/<run_name>/                      # gitignored; one folder per model/prom
   images/<ISO3>/<place>/0001.jpg …       # generated images
   images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, sizes, time
   failures.jsonl                         # errors and content-policy refusals
+  predictions.jsonl                      # one line per API call: model version, prediction id, timing
   composites/<ISO3>/<place>_mean.png     # and <place>_median.png
   composites/index.json                  # how many images went into each composite
 web/data/                                # gitignored; rebuilt by export_site
 ```
+
+`predictions.jsonl` is deliberately separate from the image metadata: it describes the API call -- which
+model version answered, which prediction id, how long it ran -- rather than the picture, so provenance
+questions can be answered without reopening every image's record.
 
 `revised_prompt` is kept because some models (e.g. DALL·E 3) rewrite the prompt before drawing, and that
 rewrite is part of how the model sees a place. Refusals are logged instead of retried forever: which
@@ -223,6 +228,7 @@ that quietly ignores the requested size shows up in the metadata instead of in t
 
 - [x] Scaffold: data files, config, generate / composite / export pipeline, map skeleton, tests
 - [x] Generation revised: one size and one camera view per prompt, budget-driven sample counts
+- [ ] Settle the image size and aspect ratio (see the open question in `config.toml`)
 - [ ] Choose an image backend (see above) and run a pilot
 - [ ] Choose images-per-prompt from a convergence check on the pilot
 - [ ] Full generation run

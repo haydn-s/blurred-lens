@@ -38,9 +38,10 @@ def build_prompts(countries: list[dict], places: list[dict], template: str) -> l
 
 
 def load_prompts(cfg: dict, countries: list[str] | None = None, places: list[str] | None = None) -> list[Prompt]:
+    """Every prompt in the run's scope: the caller's lists, else prompts.countries / prompts.places."""
     pc = cfg["prompts"]
     return build_prompts(
-        select(load_json(pc["countries_file"]), countries, "iso_a3"),
-        select(load_json(pc["places_file"]), places, "id"),
+        select(load_json(pc["countries_file"]), countries or pc.get("countries"), "iso_a3"),
+        select(load_json(pc["places_file"]), places or pc.get("places"), "id"),
         pc["template"],
     )
