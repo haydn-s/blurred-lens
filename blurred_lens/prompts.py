@@ -28,18 +28,20 @@ def select(items: list[dict], wanted: list[str] | None, key: str) -> list[dict]:
     return [item for item in items if item[key] in wanted]
 
 
+def format_prompt(template: str, country: dict, place: dict) -> str:
+    """The exact text sent to the model for one (country, place) pair."""
+    return template.format(country=country["prompt_name"], place=place["phrase"], view=place.get("view", ""))
+
+
 def build_prompts(countries: list[dict], places: list[dict], template: str) -> list[Prompt]:
-    return [
-        Prompt(c["iso_a3"], p["id"], template.format(place=p["phrase"], country=c["prompt_name"]))
-        for c in countries
-        for p in places
-    ]
+    return [Prompt(c["iso_a3"], p["id"], format_prompt(template, c, p)) for c in countries for p in places]
 
 
 def load_prompts(cfg: dict, countries: list[str] | None = None, places: list[str] | None = None) -> list[Prompt]:
+    """Every prompt in the run's scope: the caller's lists, else prompts.countries / prompts.places."""
     pc = cfg["prompts"]
     return build_prompts(
-        select(load_json(pc["countries_file"]), countries, "iso_a3"),
-        select(load_json(pc["places_file"]), places, "id"),
+        select(load_json(pc["countries_file"]), countries or pc.get("countries"), "iso_a3"),
+        select(load_json(pc["places_file"]), places or pc.get("places"), "id"),
         pc["template"],
     )

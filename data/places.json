@@ -1,10 +1,10 @@
 [
-  {"id": "city",    "label": "City",       "phrase": "a city"},
-  {"id": "town",    "label": "Town",       "phrase": "a town"},
-  {"id": "village", "label": "Village",    "phrase": "a village"},
-  {"id": "suburb",  "label": "Suburb",     "phrase": "a suburb"},
-  {"id": "rural",   "label": "Rural area", "phrase": "a rural area"},
-  {"id": "farm",    "label": "Farm",       "phrase": "a farm"},
-  {"id": "house",   "label": "House",      "phrase": "a house"},
-  {"id": "market",  "label": "Market",     "phrase": "a market"}
+  {"id": "city",    "label": "City",       "phrase": "a city",       "view": "taken at eye level from the middle of a street, looking straight down the street"},
+  {"id": "town",    "label": "Town",       "phrase": "a town",       "view": "taken at eye level from the middle of its main street, looking straight down the street"},
+  {"id": "village", "label": "Village",    "phrase": "a village",    "view": "taken at eye level from the middle of its main road, looking straight down the road"},
+  {"id": "suburb",  "label": "Suburb",     "phrase": "a suburb",     "view": "taken at eye level from the middle of a residential street, looking straight down the street"},
+  {"id": "rural",   "label": "Rural area", "phrase": "a rural area", "view": "taken at eye level, with the horizon straight across the middle of the frame"},
+  {"id": "farm",    "label": "Farm",       "phrase": "a farm",       "view": "taken at eye level across its fields, with the horizon straight across the middle of the frame"},
+  {"id": "house",   "label": "House",      "phrase": "a house",      "view": "taken straight on from across the street at eye level, with the whole front of the house centered in the frame"},
+  {"id": "market",  "label": "Market",     "phrase": "a market",     "view": "taken at eye level from the middle of a central aisle, looking straight down the aisle"}
 ]

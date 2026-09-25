@@ -1,34 +1,80 @@
 # Blurred Lens configuration. Secrets (API keys) go in .env, never here.
 
 [prompts]
-# {place} is filled from data/places.json ("phrase"), {country} from data/countries.json ("prompt_name").
-template = "Show me {place} in {country}."
+# {place} and {view} come from data/places.json ("phrase", "view"), {country} from data/countries.json
+# ("prompt_name"). {view} fixes the camera position for each kind of place, so every image of a prompt
+# shares one perspective and the images line up when they are averaged.
+template = "A photograph of {place} in {country}, {view}."
 countries_file = "data/countries.json"
 places_file = "data/places.json"
+
+# The scope of a run: which entries of those files it uses. Empty lists mean all of them, and
+# --countries / --places override these. Phase 1 is a proof of concept -- 10 countries x 3 places,
+# chosen to span regions and income levels -- and the whole set will be regenerated from scratch
+# when the full run is funded, so these images never mix with the later ones.
+countries = [
+  "USA", "MEX", "BRA", "PER",   # Americas
+  "NOR", "DEU", "ESP",          # Europe
+  "JPN", "IND", "AFG",          # Asia
+  "NGA", "KEN",                 # Africa
+  "AUS",                        # Oceania
+]
+places = ["city", "village", "house"]
 
 [generation]
 # Output folder under outputs/. Start a new name whenever you change the model, template
 # or size, so images from different setups are never averaged together.
-run_name = "v1"
-images_per_prompt = 1000
+run_name = "poc-event"
+images_per_prompt = 500       # target per prompt; with a budget, the most the budget may buy
 
-# Any OpenAI-compatible /images/generations endpoint works.
-# Duke AI Gateway: as of 2026-09-10 it serves NO image models (see README).
-base_url = "https://litellm.oit.duke.edu/v1"
-api_key_env = "DUKE_AI_API_KEY"
-model = ""                    # required before generating, e.g. "gpt-image-1-mini"
-# OpenAI directly (paid; put OPENAI_API_KEY in .env):
+# Budget: the most this run may cost in total (USD), counting images already on disk. It is split
+# evenly: every prompt gets the same number of images, as many as the budget allows, so every
+# country and place gets a composite and the composites stay comparable. Raise it later and a
+# re-run tops every prompt up. 0 = no budget (generate images_per_prompt). Needs price_per_image_usd.
+budget_usd = 65.0             # phase 1 needs $58.50; the cap is what stops a mistake costing more
+min_images_per_prompt = 20    # a budget that buys fewer than this per prompt is refused
+
+# Replicate (https://replicate.com). The API token decides which account pays, so use a token
+# created while switched to the organization that funds this work, and put it in .env.
+provider = "replicate"        # replicate | openai
+model = "black-forest-labs/flux-schnell"
+api_key_env = "REPLICATE_API_TOKEN"
+price_per_image_usd = 0.003   # flux-schnell: $3 per 1,000 output images
+count_param = "num_outputs"   # the model input that asks for several images in one prediction
+wait_seconds = 60             # "Prefer: wait" holds the request open until the prediction is done
+# An OpenAI-compatible /images/generations endpoint instead (OpenAI, a LiteLLM gateway, ...):
+# provider = "openai"
 # base_url = "https://api.openai.com/v1"
 # api_key_env = "OPENAI_API_KEY"
 # model = "gpt-image-1-mini"
 
+# Every image in a run is saved at exactly this size. It is sent with each request, and an image
+# that comes back at another size is center-cropped and resized (its returned size is logged).
+# 1024x1024 is supported by every major image model.
 size = "1024x1024"
-quality = "low"               # gpt-image-*: low | medium | high    dall-e-3: standard | hd
-images_per_request = 1        # the API's `n`: gpt-image-* allow up to 10, dall-e-3 only 1
-concurrency = 4               # requests in flight at once
-requests_per_minute = 20      # client-side throttle; Duke keys are capped at 20/min
-price_per_image_usd = 0.0     # from your provider's price list; used for cost estimates
+# OPEN QUESTION -- settle this before generating; it is cheap to change now and expensive after.
+#   - Every image of a prompt must share one size or the composites cannot be averaged. Different
+#     places could use different shapes (composites never mix places), but that needs per-place input.
+#   - A street or a horizon may read better wide (16:9, 3:2) than square; a house facade may not.
+#   - Composites are built at composite.width (512) and thumbnails at 256, so 1024 already exceeds
+#     what they need -- but the site's sample images and any later pixel-level analysis want it.
+#   - On flux-schnell the price is the same at 0.25 or 1 megapixel, so only disk and download change.
+#   - Changing it after a run means regenerating that run: images cannot be upscaled back.
+quality = "low"               # openai provider only: gpt-image-* low | medium | high
+images_per_request = 4        # images per request (flux-schnell: num_outputs allows 1-4)
+concurrency = 8               # requests in flight at once
+requests_per_minute = 300     # client-side throttle; Replicate allows 600 predictions/min
 save_format = "jpeg"          # jpeg | webp | png (png is ~6x larger on disk)
+
+# Passed straight through as the model's Replicate input, alongside the prompt. Every model has
+# its own schema (https://replicate.com/<owner>/<model>/api/schema), so change these with the model.
+[generation.input]
+aspect_ratio = "1:1"          # 1 megapixel at 1:1 -> 1024x1024
+megapixels = "1"              # "1" | "0.25"
+num_inference_steps = 4       # 1-4; 4 is the model's own default, pinned here so runs are documented
+output_format = "jpg"         # "webp" | "jpg" | "png"
+output_quality = 90           # 0-100
+go_fast = true                # the model's fp8 fast path; keep it the same for a whole run
 
 [composite]
 width = 512                   # images are resized to this width before averaging
