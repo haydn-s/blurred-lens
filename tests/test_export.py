@@ -6,7 +6,7 @@ from PIL import Image
 
 from blurred_lens.config import load_config
 from blurred_lens.export_site import build_site_data
-from blurred_lens.prompts import format_prompt, load_json
+from blurred_lens.prompts import format_prompt, load_json, template_for
 
 CFG = load_config()
 PLACES = load_json(CFG["prompts"]["places_file"])
@@ -49,7 +49,8 @@ def test_every_prompt_is_listed_before_any_images_exist(tmp_path):
     usa = country(manifest, "USA")
     assert len(manifest["countries"]) == len(load_json(CFG["prompts"]["countries_file"]))
     assert [e["metrics"] for e in usa["entries"]] == [None] * len(PLACES)
-    first = format_prompt(CFG["prompts"]["template"], {"prompt_name": "the United States"}, PLACES[0])
+    template = template_for(CFG)[1]
+    first = format_prompt(template, {"prompt_name": "the United States"}, PLACES[0])
     assert (usa["entries"][0]["prompt"], removed, manifest["metric"]) == (first, 0, None)
 
 

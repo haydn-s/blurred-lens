@@ -15,7 +15,7 @@ Class project for AIPI 590 (Explainable AI), Duke University.
 
 ```
 data/countries.json ─┐
-data/places.json ────┼─► generate ──► outputs/<run>/images/<ISO3>/<place>/0001.jpg …
+data/places.json ────┼─► generate ──► outputs/<run>-<condition>/images/<ISO3>/<place>/0001.jpg …
 config.toml ─────────┘                               │
                                                      ▼
                                     analyze ──► outputs/<run>/analysis/<ISO3>/<place>.json
@@ -28,11 +28,39 @@ config.toml ─────────┘                               │
 
 | Step | Command | What it does |
 |---|---|---|
-| 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. Resumable, breadth-first, logs metadata. |
+| 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. One condition at a time, resumable, breadth-first, seeded, logs metadata. |
 | 2. Measure | `python -m blurred_lens.analyze` | Measures color, tone and haze on every image; summarizes each prompt. |
 | 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, and tests the ranking against region and income. |
 | 4. Export | `python -m blurred_lens.export_site` | Copies sample thumbnails, writes `web/data/manifest.json` (every prompt, measured or not). |
 | 5. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
+
+## Conditions
+
+A run asks one question, and a **condition** is the sentence it asks it with. The conditions live in
+`[prompts.conditions]` in `config.toml`, `generate --condition <name>` picks one, and each writes to
+its own folder — `outputs/<run_name>-<condition>/` — so two different sentences can never be averaged
+into one measurement. Everything downstream takes that folder with `--run`.
+
+| Condition | Prompt | What it is for |
+|---|---|---|
+| `free` | *A photograph of {place} in {country}, {view}.* | what the model does when only the country, the place and the camera are fixed |
+| `noon` | …*, at noon under a clear sky with the sun high overhead.* | the light control |
+| `baseline` | *A photograph of {place}, {view}.* | the model's default picture of a place, with no country at all |
+| `baseline_noon` | the baseline, light-controlled | a default to compare light-controlled countries with |
+
+**The light control is the one that turns a number into a claim.** The free prompt fixes the camera
+but not the hour, so a country that measures warm may simply be one the model chose to draw at golden
+hour — a scene choice, not a grade. `noon` pins the hour, the sky and the sun's height and *names no
+color at all*, deliberately: an instruction like "neutral light" would control the grade as well as
+the scene, and a warmth gap that vanished under it would prove nothing. Run both, and a gap that
+survives `noon` is a cast laid over the frame rather than a time of day.
+
+**The baseline says what "warm" is warm against.** Ranking countries against each other says who is
+warmest, not whether the model is doing anything unusual to any of them. The no-country prompt gives
+the model's own default for a city, a village, a house, so each country can be read as a deviation
+from that default. It has no country dimension: one prompt per place, filed under `_none`, which is
+not an ISO code, so the baseline never enters the country rankings or the globe. `report` has nothing
+to rank in a baseline run and says so; its numbers are in `analysis/_none/<place>.json`.
 
 ## Image backend: Replicate
 
@@ -60,17 +88,46 @@ Every Replicate model has its own input schema, so a model's inputs live in `[ge
 `config.toml` instead of in the code, and `count_param` names the input that asks for several images in
 one prediction (`num_outputs` for FLUX). Read a model's schema at
 `https://replicate.com/<owner>/<model>/api/schema` whenever you change models. Whatever the model
-returns is still saved at exactly `generation.size`, so composites line up across models.
+returns is still saved at exactly `generation.size`, so images line up across models.
+
+### Making a run repeatable
+
+- **A seed per image.** Image *i* of every prompt is generated with `generation.seed_base + i`, and the
+  seed is written into `metadata.jsonl`, so any single image can be made again. The seed depends on
+  the image number alone — not on the country, the place or the condition — so image 7 of Norway's
+  city, of Nigeria's city and of the no-country baseline all start from the same noise, and the
+  sentence is the only thing that differs between them. Seeding needs `images_per_request = 1`:
+  a model handed one seed for a batch of four picks the other three itself, and the seed recorded
+  would not be one that reproduces the image. `generate` refuses the combination rather than logging
+  a seed it cannot stand behind.
+- **A pinned model version.** `generation.model_version` is the version every image of a run must come
+  from. Replicate reports the version that answered each prediction, and a mismatch stops the run: a
+  model updated half way through would change what the numbers mean without changing anything visible
+  on disk. Leave it empty and the first version seen becomes the pin for the rest of that run. Read
+  the current one at `https://replicate.com/<owner>/<model>/api`, or
+  `GET /v1/models/<owner>/<model>`.
 
 Setting `provider = "openai"` uses any OpenAI-compatible `/images/generations` endpoint instead
 (`base_url`, `api_key_env`, `model`, `quality`).
 
 ## Scale and budget
 
-197 countries × 8 place types = **1,576 prompts**. Set `generation.budget_usd` (or pass `--budget`) and
-`generate` splits the budget evenly: every prompt gets the same number of images, as many as the budget
-buys, so every country and place gets a composite and all composites are built from equal samples.
-Images per prompt for all 1,576 prompts:
+**The budget is per run, and a condition is a run.** Set `generation.budget_usd` (or pass `--budget`)
+and `generate` splits it evenly: every prompt gets the same number of images, as many as the budget
+buys, so every country and place is measured from the same sample size. Generating the same scope
+under two conditions costs two budgets.
+
+Phase 2 is 48 countries × 3 places = **144 prompts** per country condition, plus 3 for each baseline
+(the baseline has no country dimension). At `$0.003`/image:
+
+| Images per prompt | `free` | `noon` | both baselines | total |
+|---:|---:|---:|---:|---:|
+| 50 | $21.60 | $21.60 | $0.90 | **$44.10** |
+| 100 | $43.20 | $43.20 | $1.80 | **$88.20** |
+| 200 | $86.40 | $86.40 | $3.60 | **$176.40** |
+
+The full scope is 197 countries × 8 place types = **1,576 prompts**. Images per prompt for all 1,576,
+for one condition:
 
 | Budget | $0.003/image | $0.01/image | $0.04/image | $0.065/image |
 |---:|---:|---:|---:|---:|
@@ -89,9 +146,18 @@ python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04
 - **Too small a budget is refused:** if it buys fewer than `min_images_per_prompt` (default 20) per
   prompt, `generate` says what that minimum would cost. Narrow the run (`--places`), pick a cheaper
   model, or lower the minimum.
-- **How many images are enough?** The mean image changes less as N grows (per-pixel standard error
-  shrinks as 1/√N), and a fixed camera position (see [Data](#data)) lowers the spread between images, so
-  fewer are needed. Run a pilot, check how fast composites settle, and set the minimum from that.
+- **How many images are enough?** Enough that the noise on one country's mean is small against the
+  spread *between* countries — that ratio, not the images themselves, is what the comparison rests on.
+  `report` prints both numbers for every place:
+
+  ```
+  How much of this is noise?
+    city       countries differ by sd 0.412; a single country's mean is measured to ±0.137
+  ```
+
+  A country's mean is measured to `sd/√n`, so quadrupling the images halves that `±`. Run a pilot,
+  read those two numbers, and pick the smallest *n* that puts the error well inside the spread —
+  then spend what is left on more countries, which are the unit of the statistical test.
 
 ## Setup
 
@@ -106,8 +172,9 @@ Then pick a model in `config.toml` — see [Image backend](#image-backend-replic
 ## Usage
 
 ```bash
-# What would a run do? Prompt count, images, requests, cost, time, disk.
+# What would a run do? Condition, prompt count, images, requests, cost, time, disk.
 python -m blurred_lens.generate --dry-run
+python -m blurred_lens.generate --dry-run --condition noon
 
 # Pilot: 3 countries × 2 places × 5 images
 python -m blurred_lens.generate --countries FRA,NGA,JPN --places city,farm --n 5
@@ -115,12 +182,17 @@ python -m blurred_lens.generate --countries FRA,NGA,JPN --places city,farm --n 5
 # Budgeted run: $1,000 split evenly over every prompt (needs generation.price_per_image_usd)
 python -m blurred_lens.generate --budget 1000
 
-# Full run. Asks for confirmation; Ctrl+C stops cleanly; re-run the same command to resume.
-python -m blurred_lens.generate
+# The full matrix: each condition into its own folder. Asks for confirmation;
+# Ctrl+C stops cleanly; re-run the same command to resume.
+python -m blurred_lens.generate --condition free            # -> outputs/phase2-free
+python -m blurred_lens.generate --condition noon            # -> outputs/phase2-noon
+python -m blurred_lens.generate --condition baseline        # -> outputs/phase2-baseline
+python -m blurred_lens.generate --condition baseline_noon   # -> outputs/phase2-baseline-noon
 
-python -m blurred_lens.analyze --min-images 5      # default: only prompts that have all their images
-python -m blurred_lens.report                     # add --metric haze, --metric lightness, ...
-python -m blurred_lens.export_site
+# Everything after generation takes the run folder, one condition at a time.
+python -m blurred_lens.analyze --run phase2-free --min-images 5   # default: prompts with all images
+python -m blurred_lens.report  --run phase2-free                  # --metric haze, lightness, ...
+python -m blurred_lens.export_site --run phase2-free
 python -m http.server --directory web 8000
 
 python -m pytest
@@ -165,6 +237,7 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 | `prompt_name` | `the United States` | the `{country}` slot of the prompt |
 | `iso_a2`, `iso_a3`, `iso_num` | `US`, `USA`, `840` | folder names (`iso_a3`), map matching (`iso_num`) |
 | `region`, `subregion` | `Americas`, `Northern America` | grouping and analysis |
+| `latitude` | `38.0` | controlling for how far from the equator a country sits |
 | `un_status` | `member`, `observer`, `non-member` | filtering |
 
 `prompt_name` exists because grammar and ambiguity change what the model draws:
@@ -176,6 +249,27 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 - The two Congos are spelled out in full.
 
 These are research decisions: review them and note your choices in the write-up.
+
+`latitude` is a country's representative centre, from the public
+[Google canonical country centroids](https://developers.google.com/public-data/docs/canonical/countries_csv)
+matched on `iso_a2` (South Sudan postdates that table and is filled in by hand). It is there because
+latitude is the rival explanation for everything this project measures: near the equator the light
+really is harsher and warmer. One degree of precision is plenty — what matters is *distance from the
+equator*, as a covariate the analysis can hold constant.
+
+**Which countries a run covers** is `prompts.countries` in `config.toml`, and for phase 2 that list is
+built for the income question rather than hand-picked. Across the 195 countries with a World Bank
+income group the rich ones sit far from the equator and the poor ones near it — mean |latitude| 37°
+for high income against 14° for low — so "warmer because poorer" and "warmer because nearer the
+equator" would be the same sentence. The phase-2 list is 48 countries, 12 per income group, chosen to
+break that tie: hot high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago,
+Barbados, the UAE, Saudi Arabia) against cool or highland low- and lower-middle-income ones (North
+Korea, Syria, Afghanistan, Mongolia, Kyrgyzstan, Uzbekistan, Nepal, Bolivia, Lesotho, the Ethiopian
+and Rwandan highlands). That leaves the groups nearly level — mean |latitude| 25°, 23°, 23°, 19° from
+high income to low, a 6° spread where the world's is 23° — and puts all four income groups in every
+latitude band, so latitude can be controlled for instead of merely hoped about. `tests/test_data.py`
+holds the list to that standard, so editing it fails loudly rather than quietly re-introducing the
+confound.
 
 **`data/places.json`**: the `{place}` and `{view}` slots. Each entry has an `id` (folder name), a
 `label` (display), a `phrase` with its article (*a city*, *a rural area*), and a `view` that fixes the
@@ -195,9 +289,10 @@ What the model does with them is itself a finding.
 ## Output layout
 
 ```
-outputs/<run_name>/                      # gitignored; one folder per model/prompt setup
-  images/<ISO3>/<place>/0001.jpg …       # generated images
-  images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, sizes, time
+outputs/<run_name>-<condition>/          # gitignored; one folder per model/prompt setup
+  images/<ISO3>/<place>/0001.jpg …       # generated images (<ISO3> is _none for a baseline run)
+  images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, condition, seed, model,
+                                         #   revised_prompt, sizes, time
   failures.jsonl                         # errors and content-policy refusals
   predictions.jsonl                      # one line per API call: model version, prediction id, timing
   analysis/<ISO3>/<place>.json           # every image's measurements, and a summary of each metric
@@ -253,7 +348,18 @@ only thing that changed.
   each prompt gets, not the other way round, and every prompt gets the same number, so coverage never
   depends on where a run happened to stop.
 - **Resumable:** existing images are never regenerated. Re-run the same command to continue.
-- **Runs never mix:** change `generation.run_name` whenever you change the model, template or size.
+- **Runs never mix:** the condition is part of the run folder, so changing the sentence cannot top up
+  a folder generated from another one. Change `generation.run_name` yourself whenever you change the
+  model or the size, and `generation.model_version` makes a model that changes under you fatal
+  rather than invisible.
+- **The same noise for every country:** image *i* of every prompt uses seed `seed_base + i`, so the
+  country name is the only thing that differs between Norway's image 7 and Nigeria's — in the
+  sampling as well as in the sentence.
+- **The light is controlled separately, not described away:** `noon` pins the hour, the sky and the
+  sun's height and names no color, so what survives it is a grade rather than a scene choice.
+- **There is a zero to measure from:** the no-country baseline gives the model's own default picture
+  of a place, so a country can be read as a deviation from that default and not only from the average
+  country. It lives under `_none`, which is not an ISO code, so it never joins the rankings.
 - **Countries are compared within a place:** a city is only ever ranked against other countries'
   cities. Place types differ in color for reasons that have nothing to do with the country, and
   mixing them would hand back that difference as a finding.
@@ -271,9 +377,14 @@ only thing that changed.
 ## Roadmap
 
 - [x] Scaffold: data files, config, generate / measure / compare / export pipeline, tests
-- [x] Image backend (Replicate) and a budgeted phase 1: 13 countries × 3 places
-- [ ] Run phase 1 and check how many images a stable measurement needs
+- [x] Image backend (Replicate), budgeting, and measurement of every image
+- [x] Generation built for the question: a light control, a no-country baseline, a 48-country list
+      that separates income from latitude, per-image seeds and a pinned model version
+- [ ] Pilot: a few contrasting countries at ~50 images, then set the sample size from the noise line
+- [ ] Run the phase-2 matrix (`free`, `noon`, and both baselines) at the size the pilot picks
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
 - [ ] Tint the globe by the headline measurement once there is real data to scale it against
-- [ ] Write up phase 1: which countries the model grades warmest, and whether that tracks income
+- [ ] Report countries as deviations from the baseline run, and control for latitude, in `report`
+- [ ] Write up: which countries the model grades warmest, whether that survives the light control,
+      and whether it tracks income once latitude is held constant
 - [ ] Widen beyond color: what the model puts in the frame, not only how it lights it
