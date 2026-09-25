@@ -9,8 +9,8 @@ When you ask an AI image model to *"show me a city in Nigeria,"* what does it dr
 compare with what it draws for *"a city in France,"* or *"a farm in Japan"*?
 
 Blurred Lens asks one image model the same simple question about every country on Earth, collects
-many answers to each question, and blends them into a single averaged image. The result is a kind of
-blurred lens: not any one picture the model made, but the picture it tends to make.
+many answers to each question, and blends them into a single image. The result is a kind of blurred
+lens: not any one picture the model made, but the picture it tends to make.
 
 ## How it works
 
@@ -21,9 +21,10 @@ blurred lens: not any one picture the model made, but the picture it tends to ma
    rural area, a farm, a house and a market) makes 1,576 prompts.
 3. **Many samples per prompt.** An image model gives a different answer every time, so each prompt
    is sent many times. The collection reflects the model's habits rather than one lucky or unlucky draw.
-4. **Averaging.** The images for each prompt are resized and combined pixel by pixel into two composites:
-   - the **mean**, the literal average, which looks soft and ghostly;
-   - the **median**, which keeps what most images agree on and is usually sharper.
+4. **Blending.** The images for each prompt are laid over one another, though not in equal measure.
+   Each image's opacity comes from how typical it is, so pictures close to the model's most common
+   answer are blended in at full strength while one-off answers fade nearly to nothing. The composite
+   is what the model usually draws, not the arithmetic middle of everything it drew.
 
 On the globe, click a country to see its composites, the exact prompt behind each one, and some of
 the individual images that went into it.
@@ -35,6 +36,8 @@ the individual images that went into it.
 - **Blur and gray** mean the model varied, with different layouts and different subjects.
 - **Differences between countries** are the interesting part. When the same prompt yields glass towers
   for one country and dirt roads for another, the composites make that default visible at a glance.
+- **The count beside each composite** says how many images went into it; hovering it shows how many the
+  blend actually rested on. A small number there means the model kept answering in one narrow way.
 
 ## Why this is an Explainable AI project
 
@@ -59,11 +62,12 @@ prompt. Averaging many samples turns those assumptions into something you can se
 
 - **One model, one template, one language.** Other models, phrasings or languages could paint very
   different pictures.
-- **Pixel averages ignore meaning.** The same street photographed from two angles averages into a
-  blur, so composites show agreement in layout and color rather than in content.
+- **Blending still works on pixels.** Weighting by typicality drops the odd answer out, but the same
+  street drawn from two angles still blends into a blur, so composites show agreement in layout and
+  color rather than in content.
 - **A finite sample.** Each composite is built from a limited number of images, so details can shift
   as more are added.
-- **Averages flatten variety.** A composite can make a diverse set of images look uniform, which is
+- **Blends flatten variety.** A composite can make a diverse set of images look uniform, which is
   why the individual images are shown next to it.
 
 ## Status

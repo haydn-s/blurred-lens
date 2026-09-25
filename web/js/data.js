@@ -26,7 +26,7 @@ export async function loadData() {
 
   const countries = (manifest?.countries ?? []).map((c) => ({
     ...c,
-    done: c.entries.filter((e) => e.composites).length, // places with composites
+    done: c.entries.filter((e) => e.composite).length, // places whose composite is built
     focus: null, // { lat, lng } the camera flies to
   }));
   const byIso3 = new Map(countries.map((c) => [c.iso3, c]));

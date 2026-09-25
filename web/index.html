@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Blurred Lens · How an AI image model sees the world</title>
-  <meta name="description" content="An interactive globe of AI-generated composites: what an image model draws when asked to show a city, a farm or a house in every country, averaged into one image.">
+  <meta name="description" content="An interactive globe of AI-generated composites: what an image model draws when asked to show a city, a farm or a house in every country, blended into one image.">
   <meta name="theme-color" content="#04060c">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
@@ -50,7 +50,7 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">Blurred Lens</span>
       </a>
-      <p class="tagline">What an AI image model draws when asked to picture places in every country, averaged into a single image.</p>
+      <p class="tagline">What an AI image model draws when asked to picture places in every country, blended into a single image.</p>
     </header>
 
     <div class="search" role="search">
@@ -97,10 +97,6 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Globe
       </button>
-      <div class="segmented glass" role="group" aria-label="Composite">
-        <button type="button" data-method="mean" aria-pressed="true" title="Pixel-wise average of every image">Mean</button>
-        <button type="button" data-method="median" aria-pressed="false" title="Pixel-wise median: sharper, ignores outliers">Median</button>
-      </div>
     </div>
 
     <header class="gallery-head">

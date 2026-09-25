@@ -35,7 +35,7 @@ function renderHud(manifest, countries) {
     return;
   }
   const entries = countries.flatMap((c) => c.entries);
-  const done = entries.filter((e) => e.composites).length;
+  const done = entries.filter((e) => e.composite).length;
   const images = entries.reduce((sum, e) => sum + e.n_images, 0);
   $("#hud-template").textContent = `“${manifest.template}”`;
   $("#hud-stats").textContent =

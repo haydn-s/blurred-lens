@@ -6,7 +6,6 @@ import { el, formatCount, prefersReducedMotion } from "./util.js";
 const CLOSE_MS = 480; // matches --gallery-ms in styles.css
 const WHEEL_QUIET_MS = 180; // one wheel/trackpad gesture moves one card
 const SUPPORTS_SCROLLEND = "onscrollend" in window;
-const METHOD_LABELS = { mean: "Mean", median: "Median" };
 
 export class Gallery {
   constructor(root, { places, onRequestClose }) {
@@ -20,11 +19,9 @@ export class Gallery {
     this.summary = root.querySelector(".gallery-summary");
     this.prevButton = root.querySelector('[data-action="prev"]');
     this.nextButton = root.querySelector('[data-action="next"]');
-    this.methodButtons = [...root.querySelectorAll("[data-method]")];
 
     this.country = null;
-    this.method = "mean";
-    this.cards = []; // { node, frame, image, count, entry }
+    this.cards = []; // { node, frame, count, entry }
     this.tabButtons = [];
     this.index = 0;
     this.targetIndex = null; // set while a programmatic scroll is running
@@ -63,7 +60,7 @@ export class Gallery {
     this.root.getBoundingClientRect(); // commit the un-hide before starting the transition
     this.root.classList.add("is-open");
     document.addEventListener("keydown", this.handleKey);
-    this.go(Math.max(0, country.entries.findIndex((e) => e.composites)), false);
+    this.go(Math.max(0, country.entries.findIndex((e) => e.composite)), false);
     this.root.querySelector('[data-action="close"]').focus({ preventScroll: true });
   }
 
@@ -86,16 +83,25 @@ export class Gallery {
     this.cards = country.entries.map((entry, i) => {
       const label = this.placeLabels.get(entry.place) ?? entry.place;
       const frame = el("div", { class: "card-frame" });
-      let image = null;
-      if (entry.composites) {
-        image = el("img", { class: "card-image", decoding: "async", draggable: "false" });
+      const count = el("span", { class: "card-count" });
+      if (entry.composite) {
+        const blended = `Blend of ${formatCount(entry.n_images)} images`;
+        const image = el("img", {
+          class: "card-image", src: `data/${entry.composite}`, decoding: "async", draggable: "false",
+          alt: `${blended} an AI model generated for “${entry.prompt}”`,
+        });
         image.addEventListener("load", () => frame.classList.add("is-loaded"));
         frame.append(image);
+        count.textContent = blended;
+        // Outliers keep little weight, so say how many images the blend really rests on.
+        if (entry.effective_images) {
+          count.title = `${formatCount(Math.round(entry.effective_images))} of them carried the blend`;
+        }
       } else {
         frame.classList.add("is-empty");
         frame.append(el("span", { class: "card-empty-label" }, "Not generated yet"));
+        count.textContent = "Awaiting generation";
       }
-      const count = el("span", { class: "card-count" });
       const sources = entry.samples.map((s) =>
         el("img", { src: `data/${s.image}`, alt: "", loading: "lazy", draggable: "false", title: s.revised_prompt ?? entry.prompt }),
       );
@@ -109,41 +115,18 @@ export class Gallery {
           ),
         ),
       );
-      return { node, frame, image, count, entry };
+      return { node, frame, count, entry };
     });
-    this.cards.forEach((card) => this.showMethod(card));
     this.track.replaceChildren(...this.cards.map((card) => card.node));
     this.track.scrollLeft = 0;
   }
 
   renderTabs(country) {
     this.tabButtons = country.entries.map((entry, i) =>
-      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.composites },
+      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.composite },
         this.placeLabels.get(entry.place) ?? entry.place),
     );
     this.tabs.replaceChildren(...this.tabButtons);
-  }
-
-  showMethod({ frame, image, count, entry }) {
-    if (!entry.composites) {
-      count.textContent = "Awaiting generation";
-      return;
-    }
-    const label = METHOD_LABELS[this.method];
-    count.textContent = `${label} of ${formatCount(entry.n_images)} images`;
-    image.alt = `${label} of ${formatCount(entry.n_images)} AI-generated images for “${entry.prompt}”`;
-    const src = `data/${entry.composites[this.method]}`;
-    if (image.getAttribute("src") !== src) {
-      frame.classList.remove("is-loaded");
-      image.src = src;
-    }
-  }
-
-  setMethod(method) {
-    if (method === this.method) return;
-    this.method = method;
-    for (const button of this.methodButtons) button.setAttribute("aria-pressed", String(button.dataset.method === method));
-    this.cards.forEach((card) => this.showMethod(card));
   }
 
   // ---- Navigation ----------------------------------------------------------
@@ -206,11 +189,10 @@ export class Gallery {
   handleClick(e) {
     const button = e.target.closest("button");
     if (button) {
-      const { action, method, index } = button.dataset;
+      const { action, index } = button.dataset;
       if (action === "close") this.onRequestClose();
       else if (action === "prev") this.go(this.index - 1);
       else if (action === "next") this.go(this.index + 1);
-      else if (method) this.setMethod(method);
       else if (index !== undefined) this.go(Number(index));
       return;
     }

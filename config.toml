@@ -31,7 +31,13 @@ price_per_image_usd = 0.0     # from your provider's price list; used for cost e
 save_format = "jpeg"          # jpeg | webp | png (png is ~6x larger on disk)
 
 [composite]
-width = 512                   # images are resized to this width before averaging
+# Each prompt's images are alpha-blended into one composite, with each image's alpha set by how
+# typical it is, so the result leans towards what the model usually draws (see README).
+width = 512                   # images are resized to this width before blending
+bandwidth = 1.0               # how tightly the blend focuses on the model's most common answer:
+                              # 0.5 leans towards the single most typical image, 2.0 towards a flat average
+iterations = 5                # mean-shift passes used to find that answer
+min_spread = 3.0              # leave out near-blank frames (pixel standard deviation below this); 0 keeps all
 
 [site]
 samples_per_prompt = 8        # individual images shown per prompt on the website

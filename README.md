@@ -2,7 +2,7 @@
 
 How does an AI image model picture *a city in Nigeria*, *a farm in France*, or *a house in Japan*?
 Blurred Lens sends the same simple prompt for every country × place pair, generates many images per
-prompt, and averages them into a single composite: the model's "blurred lens" on that place. An
+prompt, and blends them into a single composite: the model's "blurred lens" on that place. An
 interactive 3D globe lets people click a country and browse its composites, sample images, and the
 exact prompts behind them.
 
@@ -15,7 +15,7 @@ data/countries.json ─┐
 data/places.json ────┼─► generate ──► outputs/<run>/images/<ISO3>/<place>/0001.jpg …
 config.toml ─────────┘                               │
                                                      ▼
-                                  composite ──► outputs/<run>/composites/<ISO3>/<place>_mean.png
+                                  composite ──► outputs/<run>/composites/<ISO3>/<place>.png
                                                      │
                                                      ▼
                                 export_site ──► web/data/manifest.json + images ──► web/ (globe)
@@ -24,7 +24,7 @@ config.toml ─────────┘                               │
 | Step | Command | What it does |
 |---|---|---|
 | 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. Resumable, breadth-first, logs metadata. |
-| 2. Composite | `python -m blurred_lens.composite` | Pixel-wise mean and median of each prompt's images. |
+| 2. Composite | `python -m blurred_lens.composite` | Alpha-blends each prompt's images, weighted towards its typical ones. |
 | 3. Export | `python -m blurred_lens.export_site` | Copies composites and thumbnails, writes `web/data/manifest.json` (every prompt, generated or not). |
 | 4. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
 
@@ -56,9 +56,9 @@ set up with is capped at **$1/day** and **20 requests/minute**. `generate` has n
 
 The prices are illustrative. Check your provider's current pricing and set `price_per_image_usd` to get
 real estimates from `python -m blurred_lens.generate --dry-run`. On a $1/day budget even 10 images per
-prompt would take months. Start with a pilot (a few countries, ~5 images each) and scale up: the mean
-image changes less and less as N grows (per-pixel standard error shrinks as 1/√N), so a convergence
-check on pilot data can justify a smaller N than 1,000.
+prompt would take months. Start with a pilot (a few countries, ~5 images each) and scale up: the
+composite changes less and less as N grows, so a convergence check on pilot data can justify a smaller
+N than 1,000.
 
 ## Setup
 
@@ -97,8 +97,8 @@ modules from `file://`), e.g. `python -m http.server --directory web 8000`.
 - **Globe:** drag to rotate (with inertia), scroll or pinch to zoom; it turns slowly when idle. Hovering
   a country lifts it with a soft glow; countries that have composites are tinted.
 - **Gallery:** clicking a country flies the camera there and opens a full-screen gallery with one card per
-  place. Swipe, scroll, press ← → or pick a tab; switch between **Mean** and **Median**; Esc or the
-  browser's back button returns to the globe. Places without composites show as "not generated yet".
+  place. Swipe, scroll, press ← → or pick a tab; Esc or the browser's back button returns to the globe.
+  Places without composites show as "not generated yet".
 - **Search:** press `/` to find any country by name or ISO code, including ones too small to click
   (Tuvalu has no shape on the 1:50m map).
 - **About page:** `about.html` displays [`web/project_description.md`](web/project_description.md). Edit that
@@ -152,8 +152,9 @@ outputs/<run_name>/                      # gitignored; one folder per model/prom
   images/<ISO3>/<place>/0001.jpg …       # generated images
   images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, time
   failures.jsonl                         # errors and content-policy refusals
-  composites/<ISO3>/<place>_mean.png     # and <place>_median.png
-  composites/index.json                  # how many images went into each composite
+  composites/<ISO3>/<place>.png          # the blended composite
+  composites/index.json                  # how each composite was built: images used, images left
+                                         # out and why, and the blend settings
 web/data/                                # gitignored; rebuilt by export_site
 ```
 
@@ -168,10 +169,20 @@ prompts get refused is data too.
   results are still comparable.
 - **Resumable:** existing images are never regenerated. Re-run the same command to continue.
 - **Runs never mix:** change `generation.run_name` whenever you change the model, template or size.
-- **Mean vs. median:** the mean is the literal average (ghostly and blurred); the median is often sharper
-  and less swayed by outliers. Both are built and the site shows both.
+- **Blending, not averaging:** each image is alpha-composited onto the last, but its alpha comes from
+  how typical it is. A mean-shift walk (`composite.bandwidth`, `composite.iterations`) finds the densest
+  group of answers, so the composite settles on what the model usually draws rather than the arithmetic
+  middle of everything it drew. Lower the bandwidth to lean towards the single most typical image, raise
+  it to approach a flat average. `composites/index.json` records `effective_images`: how many images the
+  blend really rested on, which is far below the raw count when a model keeps answering one way.
+- **Blank frames are left out:** an image whose pixels barely vary (`composite.min_spread`) is usually a
+  model handing back a black or single-colour frame instead of refusing. It is skipped and recorded in
+  `composites/index.json` instead of quietly darkening the composite.
+- **Nothing is built twice:** a composite is remade only when its images or the blend settings change,
+  and `export_site` re-encodes a web image only when its source or the export settings change, deleting
+  any image the manifest no longer names. `--force` rebuilds composites regardless.
 - **Memory:** `composite` holds one prompt's images in memory at `composite.width` px (512 px ×
-  1,000 images ≈ 0.8 GB, about twice that while computing the median).
+  1,000 images ≈ 0.8 GB).
 
 ## Roadmap
 
