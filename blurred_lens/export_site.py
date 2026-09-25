@@ -1,14 +1,14 @@
-"""Bundle composites, sample images and prompts into web/data/ for the globe website.
+"""Bundle measurements, sample images and prompts into web/data/ for the globe website.
 
     python -m blurred_lens.export_site
     python -m http.server --directory web 8000      # then open http://localhost:8000
 
-Every country and place is listed even before any images exist, so the site works at
-every stage of generation: prompts without composites show as "not generated yet".
+Every country and place is listed even before any images exist, so the site works at every stage of
+generation: prompts nothing has been generated for show as "not generated yet".
 
 An image is re-encoded whenever its source file or the export settings change, and images this
-export didn't write are deleted, so web/data always shows the run named in the manifest and never
-a leftover from an earlier one.
+export didn't write are deleted, so web/data always shows the run named in the manifest and never a
+leftover from an earlier one.
 """
 
 import argparse
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .composite import composite_path
+from .analyze import analysis_path, read_metadata
 from .config import ROOT, image_files, load_config, run_dir
 from .prompts import format_prompt, load_json
 
@@ -57,7 +57,7 @@ class Exporter:
     def finish(self) -> int:
         """Delete images this export didn't write, and record what it did write."""
         removed = 0
-        for folder in ("composites", "samples"):
+        for folder in ("samples",):
             root = self.site / folder
             if not root.is_dir():
                 continue
@@ -72,20 +72,14 @@ class Exporter:
         return removed
 
 
-def read_metadata(folder: Path) -> dict[int, dict]:
-    path = folder / "metadata.jsonl"
-    if not path.exists():
-        return {}
-    with open(path, encoding="utf-8") as f:
-        records = [json.loads(line) for line in f if line.strip()]
-    return {r["index"]: r for r in records}
-
-
 def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
-    """Copy web-sized images from run folder `out` into `site`; return the manifest and how many
-    stale images were removed."""
-    index_path = out / "composites" / "index.json"
-    built = json.loads(index_path.read_text()) if index_path.exists() else {}
+    """Copy web-sized sample images from run folder `out` into `site`; return the manifest and how
+    many stale images were removed."""
+    index_path = out / "analysis" / "index.json"
+    measured = json.loads(index_path.read_text()) if index_path.exists() else {}
+    report_path = out / "analysis" / "report.json"
+    report = json.loads(report_path.read_text()) if report_path.exists() else None
+
     template = cfg["prompts"]["template"]
     n_samples, thumb = cfg["site"]["samples_per_prompt"], cfg["site"]["thumbnail_size"]
     places = load_json(cfg["prompts"]["places_file"])
@@ -94,29 +88,32 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
     countries = []
     for c in load_json(cfg["prompts"]["countries_file"]):
         iso3, entries = c["iso_a3"], []
+        ranked = (report or {}).get("countries", {}).get(iso3, {})
         for p in places:
             entry = {
                 "place": p["id"],
                 "prompt": format_prompt(template, c, p),
                 "model": None,
                 "n_images": 0,
-                "effective_images": 0,
-                "composite": None,  # stays None until the prompt's composite is built
+                "metrics": None,  # stays None until the prompt's images are measured
+                "z": None,        # how far from the average country, on the headline metric
                 "samples": [],
             }
             key = f"{iso3}/{p['id']}"
-            source = composite_path(out, iso3, p["id"])
-            if key in built and source.exists():
-                record = built[key]
+            source = analysis_path(out, iso3, p["id"])
+            if key in measured and source.exists():
+                data = json.loads(source.read_text())
+                entry.update(
+                    prompt=data.get("prompt") or entry["prompt"],
+                    model=data.get("model"),
+                    n_images=data["n_images"],
+                    metrics={name: round(stats["mean"], 3) for name, stats in data["summary"].items()},
+                    z=ranked.get("places", {}).get(p["id"], {}).get("z"),
+                )
+                # Images the measurements left out aren't "images behind these numbers".
                 folder = out / "images" / iso3 / p["id"]
                 meta = read_metadata(folder)
-                first = next(iter(meta.values()), {})
-                entry.update(prompt=first.get("prompt") or entry["prompt"], model=first.get("model"),
-                             n_images=record["n_images"],
-                             effective_images=record.get("effective_images", 0),
-                             composite=exporter.jpeg(source, f"composites/{iso3}/{p['id']}.jpg"))
-                # Images the blend left out aren't "images behind this composite", so don't show them.
-                excluded = record.get("excluded", {})
+                excluded = data.get("excluded", {})
                 usable = [f for f in image_files(folder) if f.name not in excluded]
                 for f in usable[:n_samples]:
                     rel = exporter.jpeg(f, f"samples/{iso3}/{p['id']}/{f.stem}.jpg", thumb)
@@ -125,13 +122,17 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
             entries.append(entry)
         countries.append({
             "iso3": iso3, "iso_num": c["iso_num"], "name": c["name"],
-            "region": c["region"], "subregion": c["subregion"], "entries": entries,
+            "region": c["region"], "subregion": c["subregion"],
+            "income": ranked.get("income"),
+            "index": ranked.get("index"),  # the country's standing on the headline metric
+            "entries": entries,
         })
 
     manifest = {
         "run": out.name,
         "template": template,
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "metric": {"name": report["metric"], "label": report["metric_label"]} if report else None,
         "places": [{"id": p["id"], "label": p["label"]} for p in places],
         "countries": countries,
     }
@@ -150,8 +151,10 @@ def main(argv: list[str] | None = None) -> None:
     (site / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")),
                                         encoding="utf-8")
     entries = [e for c in manifest["countries"] for e in c["entries"]]
-    done = sum(e["composite"] is not None for e in entries)
-    print(f"Exported {done:,} of {len(entries):,} prompts with composites -> {site}")
+    done = sum(e["metrics"] is not None for e in entries)
+    print(f"Exported {done:,} of {len(entries):,} prompts with measurements -> {site}")
+    if manifest["metric"] is None:
+        print("No report.json yet, so the site has no rankings. Run `python -m blurred_lens.report`.")
     if removed:
         print(f"Removed {removed:,} image(s) an earlier export had left behind")
 

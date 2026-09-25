@@ -6,11 +6,13 @@ import { el, formatCount, prefersReducedMotion } from "./util.js";
 const CLOSE_MS = 480; // matches --gallery-ms in styles.css
 const WHEEL_QUIET_MS = 180; // one wheel/trackpad gesture moves one card
 const SUPPORTS_SCROLLEND = "onscrollend" in window;
+const METRIC_SPAN = 3; // z-scores past three standard deviations fill the bar
 
 export class Gallery {
-  constructor(root, { places, onRequestClose }) {
+  constructor(root, { places, metric, onRequestClose }) {
     this.root = root;
     this.placeLabels = new Map(places.map((p) => [p.id, p.label]));
+    this.metric = metric ?? null; // which measurement the z-scores describe
     this.onRequestClose = onRequestClose;
     this.track = root.querySelector(".gallery-track");
     this.tabs = root.querySelector(".gallery-tabs");
@@ -60,7 +62,7 @@ export class Gallery {
     this.root.getBoundingClientRect(); // commit the un-hide before starting the transition
     this.root.classList.add("is-open");
     document.addEventListener("keydown", this.handleKey);
-    this.go(Math.max(0, country.entries.findIndex((e) => e.composite)), false);
+    this.go(Math.max(0, country.entries.findIndex((e) => e.metrics)), false);
     this.root.querySelector('[data-action="close"]').focus({ preventScroll: true });
   }
 
@@ -84,19 +86,15 @@ export class Gallery {
       const label = this.placeLabels.get(entry.place) ?? entry.place;
       const frame = el("div", { class: "card-frame" });
       const count = el("span", { class: "card-count" });
-      if (entry.composite) {
-        const blended = `Blend of ${formatCount(entry.n_images)} images`;
-        const image = el("img", {
-          class: "card-image", src: `data/${entry.composite}`, decoding: "async", draggable: "false",
-          alt: `${blended} an AI model generated for “${entry.prompt}”`,
-        });
-        image.addEventListener("load", () => frame.classList.add("is-loaded"));
-        frame.append(image);
-        count.textContent = blended;
-        // Outliers keep little weight, so say how many images the blend really rests on.
-        if (entry.effective_images) {
-          count.title = `${formatCount(Math.round(entry.effective_images))} of them carried the blend`;
-        }
+      if (entry.metrics) {
+        // No composite any more: the frame shows a few of the images the numbers came from.
+        frame.append(el("div", { class: "card-grid" },
+          ...entry.samples.slice(0, 4).map((s) =>
+            el("img", { src: `data/${s.image}`, alt: `One of the images generated for “${entry.prompt}”`,
+                        loading: "lazy", decoding: "async", draggable: "false" })),
+        ));
+        frame.classList.add("is-loaded");
+        count.textContent = `${formatCount(entry.n_images)} images measured`;
       } else {
         frame.classList.add("is-empty");
         frame.append(el("span", { class: "card-empty-label" }, "Not generated yet"));
@@ -111,7 +109,8 @@ export class Gallery {
           el("figcaption", { class: "card-caption" },
             el("div", { class: "card-heading" }, el("span", { class: "card-place" }, label), count),
             el("p", { class: "card-prompt" }, `“${entry.prompt}”`),
-            sources.length ? el("div", { class: "card-sources", title: "Some of the images behind this composite" }, ...sources) : null,
+            this.measurements(entry),
+            sources.length ? el("div", { class: "card-sources", title: "Some of the images these numbers came from" }, ...sources) : null,
           ),
         ),
       );
@@ -121,9 +120,26 @@ export class Gallery {
     this.track.scrollLeft = 0;
   }
 
+  // How this prompt's images compare with every other country's images of the same place.
+  measurements(entry) {
+    if (!entry.metrics) return null;
+    const rows = [];
+    if (this.metric && typeof entry.z === "number") {
+      rows.push(
+        el("div", { class: "metric-head" },
+          el("span", { class: "metric-label" }, this.metric.label),
+          el("span", { class: "metric-value" }, `${entry.z >= 0 ? "+" : ""}${entry.z.toFixed(2)}σ`)),
+        metricBar(entry.z),
+      );
+    }
+    const numbers = metricNumbers(entry.metrics);
+    if (numbers) rows.push(el("p", { class: "metric-numbers" }, numbers));
+    return rows.length ? el("div", { class: "card-metrics" }, ...rows) : null;
+  }
+
   renderTabs(country) {
     this.tabButtons = country.entries.map((entry, i) =>
-      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.composite },
+      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.metrics },
         this.placeLabels.get(entry.place) ?? entry.place),
     );
     this.tabs.replaceChildren(...this.tabButtons);
@@ -225,6 +241,23 @@ export class Gallery {
     e.preventDefault();
     action();
   }
+}
+
+// A z-score drawn from the middle out: left of center is below the average country, right is above.
+function metricBar(z) {
+  const clamped = Math.max(-METRIC_SPAN, Math.min(METRIC_SPAN, z));
+  const half = (Math.abs(clamped) / METRIC_SPAN) * 50;
+  return el("div", { class: "metric-bar", "data-sign": clamped < 0 ? "low" : "high" },
+    el("span", { style: `left: ${clamped < 0 ? 50 - half : 50}%; width: ${half}%` }));
+}
+
+function metricNumbers(metrics) {
+  const parts = [];
+  if (metrics.cast_kelvin) parts.push(`${Math.round(metrics.cast_kelvin / 10) * 10} K`);
+  if (metrics.haze !== undefined) parts.push(`haze ${metrics.haze.toFixed(2)}`);
+  if (metrics.lightness !== undefined) parts.push(`lightness ${Math.round(metrics.lightness)}`);
+  if (metrics.colorfulness !== undefined) parts.push(`color ${Math.round(metrics.colorfulness)}`);
+  return parts.join(" · ");
 }
 
 const totalImages = (country) => country.entries.reduce((sum, e) => sum + e.n_images, 0);

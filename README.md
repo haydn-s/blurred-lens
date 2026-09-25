@@ -2,9 +2,12 @@
 
 How does an AI image model picture *a city in Nigeria*, *a farm in France*, or *a house in Japan*?
 Blurred Lens sends the same simple prompt for every country × place pair, generates many images per
-prompt, and blends them into a single composite: the model's "blurred lens" on that place. An
-interactive 3D globe lets people click a country and browse its composites, sample images, and the
-exact prompts behind them.
+prompt, and measures every one of them: how warm the color is, how hazy, how dark, how vivid. An
+interactive 3D globe lets people click a country and see how the model's pictures of it compare with
+every other country's, next to sample images and the exact prompts behind them.
+
+The question is the one film critics ask about the sepia "Mexico filter": does the model reach for
+warmer, dustier, darker color when the country is poorer?
 
 Class project for AIPI 590 (Explainable AI), Duke University.
 
@@ -15,7 +18,9 @@ data/countries.json ─┐
 data/places.json ────┼─► generate ──► outputs/<run>/images/<ISO3>/<place>/0001.jpg …
 config.toml ─────────┘                               │
                                                      ▼
-                                  composite ──► outputs/<run>/composites/<ISO3>/<place>.png
+                                    analyze ──► outputs/<run>/analysis/<ISO3>/<place>.json
+                                                     │
+                                     report ──► outputs/<run>/analysis/report.json
                                                      │
                                                      ▼
                                 export_site ──► web/data/manifest.json + images ──► web/ (globe)
@@ -24,9 +29,10 @@ config.toml ─────────┘                               │
 | Step | Command | What it does |
 |---|---|---|
 | 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. Resumable, breadth-first, logs metadata. |
-| 2. Composite | `python -m blurred_lens.composite` | Alpha-blends each prompt's images, weighted towards its typical ones. |
-| 3. Export | `python -m blurred_lens.export_site` | Copies composites and thumbnails, writes `web/data/manifest.json` (every prompt, generated or not). |
-| 4. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
+| 2. Measure | `python -m blurred_lens.analyze` | Measures color, tone and haze on every image; summarizes each prompt. |
+| 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, and tests the ranking against region and income. |
+| 4. Export | `python -m blurred_lens.export_site` | Copies sample thumbnails, writes `web/data/manifest.json` (every prompt, measured or not). |
+| 5. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
 
 ## Image backend: Replicate
 
@@ -112,7 +118,8 @@ python -m blurred_lens.generate --budget 1000
 # Full run. Asks for confirmation; Ctrl+C stops cleanly; re-run the same command to resume.
 python -m blurred_lens.generate
 
-python -m blurred_lens.composite --min-images 5   # default: only prompts that have all their images
+python -m blurred_lens.analyze --min-images 5      # default: only prompts that have all their images
+python -m blurred_lens.report                     # add --metric haze, --metric lightness, ...
 python -m blurred_lens.export_site
 python -m http.server --directory web 8000
 
@@ -125,10 +132,11 @@ python -m pytest
 modules from `file://`), e.g. `python -m http.server --directory web 8000`.
 
 - **Globe:** drag to rotate (with inertia), scroll or pinch to zoom; it turns slowly when idle. Hovering
-  a country lifts it with a soft glow; countries that have composites are tinted.
+  a country lifts it with a soft glow; countries whose images have been measured are tinted.
 - **Gallery:** clicking a country flies the camera there and opens a full-screen gallery with one card per
-  place. Swipe, scroll, press ← → or pick a tab; Esc or the browser's back button returns to the globe.
-  Places without composites show as "not generated yet".
+  place, each showing sample images and how that country compares with the rest on the headline
+  measurement. Swipe, scroll, press ← → or pick a tab; Esc or the browser's back button returns to the
+  globe. Places with nothing generated yet say so.
 - **Search:** press `/` to find any country by name or ISO code, including ones too small to click
   (Tuvalu has no shape on the 1:50m map).
 - **About page:** `about.html` displays [`web/project_description.md`](web/project_description.md). Edit that
@@ -192,9 +200,9 @@ outputs/<run_name>/                      # gitignored; one folder per model/prom
   images/<ISO3>/<place>/metadata.jsonl   # one line per image: prompt, model, revised_prompt, sizes, time
   failures.jsonl                         # errors and content-policy refusals
   predictions.jsonl                      # one line per API call: model version, prediction id, timing
-  composites/<ISO3>/<place>.png          # the blended composite
-  composites/index.json                  # how each composite was built: images used, images left
-                                         # out and why, and the blend settings
+  analysis/<ISO3>/<place>.json           # every image's measurements, and a summary of each metric
+  analysis/index.json                    # what was measured, what was left out and why, and the settings
+  analysis/report.json                   # the comparison across countries (written by report)
 web/data/                                # gitignored; rebuilt by export_site
 ```
 
@@ -208,42 +216,64 @@ prompts get refused is data too. `returned_size` records the size the model actu
 image is saved at `generation.size`, and anything else is center-cropped and resized first, so a model
 that quietly ignores the requested size shows up in the metadata instead of in the composites.
 
+## What is measured
+
+Every image is measured at `analysis.width`, and each prompt's numbers come with the standard error of
+their mean, so a gap between two countries can be weighed against the noise in the sample.
+
+| Measurement | What it catches |
+|---|---|
+| `cast_a`, `cast_b`, `cast_kelvin` | the color cast lying over the picture, estimated with shades-of-gray (Finlayson and Trezzi, 2004); kelvin says the same thing in film's own units, where lower is warmer |
+| `midtone_b`, `shadow_b`, `highlight_b`, `sky_b` | where that cast falls. A grade laid over the whole frame moves all of them together; a golden sky moves mostly the sky |
+| `warm_split` | warm highlights against cool shadows, the teal-and-orange look. Near zero means one flat cast instead |
+| `chroma`, `colorfulness` | saturation, the other half of "vibrant" stereotypes (Hasler and Suesstrunk, 2003) |
+| `lightness`, `contrast` | how dark, and how flat |
+| `haze` | dust and smog, via the dark channel prior (He, Sun and Tang, 2009) |
+| `amber_share`, `cool_share`, `green_share` | how much of the frame sits in each hue band |
+| `edge_density` | how busy the frame is |
+
+The cast estimate deliberately cannot adapt to the picture. An earlier version measured it from "the
+least colorful pixels", which simply followed the grade: warming an image made its blue sky the most
+neutral thing in frame, so the measurement came back *cooler*. `tests/test_metrics.py` guards that.
+
+No single image can prove a grade was applied -- a sunset really in frame is warm content, and looks
+much like a warm filter. What carries the argument is that the prompt, the camera view, the model and
+the size are all fixed, so between two countries' pictures of the same place, the country name is the
+only thing that changed.
+
 ## Design notes
 
 - **Breadth-first:** requests go out as image 1 of every prompt, then image 2, and so on. If a run stops
   early (budget, rate limit, Ctrl+C), every prompt has about the same number of images, so partial
   results are still comparable.
 - **One size, one view:** every image is saved at exactly `generation.size`, and each place fixes the
-  camera (`view` in `data/places.json`), so one prompt's images line up when they are averaged.
+  camera (`view` in `data/places.json`), so two countries' pictures of the same place differ only
+  because the country name differs.
 - **The budget sets the sample size:** `--budget` (or `generation.budget_usd`) decides how many images
   each prompt gets, not the other way round, and every prompt gets the same number, so coverage never
   depends on where a run happened to stop.
 - **Resumable:** existing images are never regenerated. Re-run the same command to continue.
 - **Runs never mix:** change `generation.run_name` whenever you change the model, template or size.
-- **Blending, not averaging:** each image is alpha-composited onto the last, but its alpha comes from
-  how typical it is. A mean-shift walk (`composite.bandwidth`, `composite.iterations`) finds the densest
-  group of answers, so the composite settles on what the model usually draws rather than the arithmetic
-  middle of everything it drew. Lower the bandwidth to lean towards the single most typical image, raise
-  it to approach a flat average. `composites/index.json` records `effective_images`: how many images the
-  blend really rested on, which is far below the raw count when a model keeps answering one way.
-- **Blank frames are left out:** an image whose pixels barely vary (`composite.min_spread`) is usually a
-  model handing back a black or single-colour frame instead of refusing. It is skipped and recorded in
-  `composites/index.json` instead of quietly darkening the composite.
-- **Nothing is built twice:** a composite is remade only when its images or the blend settings change,
-  and `export_site` re-encodes a web image only when its source or the export settings change, deleting
-  any image the manifest no longer names. `--force` rebuilds composites regardless.
-- **Memory:** `composite` holds one prompt's images in memory at `composite.width` px (512 px ×
-  1,000 images ≈ 0.8 GB).
+- **Countries are compared within a place:** a city is only ever ranked against other countries'
+  cities. Place types differ in color for reasons that have nothing to do with the country, and
+  mixing them would hand back that difference as a finding.
+- **The country is the unit, not the image:** 500 images of one prompt say precisely what that one
+  answer looks like, not that the answer is common, so the group tests shuffle country labels rather
+  than image labels, and `report` prints how many comparisons it made.
+- **Blank frames are left out:** an image whose pixels barely vary (`analysis.min_spread`) is usually a
+  model handing back a black or single-color frame instead of refusing, and its color is not a color
+  the model chose for that country. It is skipped and recorded in `analysis/index.json`.
+- **Nothing is measured twice:** a prompt is re-measured only when its images or the measurement
+  settings change, and `export_site` re-encodes a web image only when its source or the export settings
+  change, deleting any image the manifest no longer names. `--force` measures again regardless.
+- **Memory:** `analyze` holds one image at a time, so a run of any size measures in a few hundred MB.
 
 ## Roadmap
 
-- [x] Scaffold: data files, config, generate / composite / export pipeline, map skeleton, tests
-- [x] Generation revised: one size and one camera view per prompt, budget-driven sample counts
-- [ ] Settle the image size and aspect ratio (see the open question in `config.toml`)
-- [ ] Choose an image backend (see above) and run a pilot
-- [ ] Choose images-per-prompt from a convergence check on the pilot
-- [ ] Full generation run
+- [x] Scaffold: data files, config, generate / measure / compare / export pipeline, tests
+- [x] Image backend (Replicate) and a budgeted phase 1: 13 countries × 3 places
+- [ ] Run phase 1 and check how many images a stable measurement needs
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
-- [ ] Host the site (e.g. GitHub Pages); add comparisons across places and regions
-- [ ] XAI analysis: region-level composites, "most typical" images in embedding space, attention maps
-      with an open model
+- [ ] Tint the globe by the headline measurement once there is real data to scale it against
+- [ ] Write up phase 1: which countries the model grades warmest, and whether that tracks income
+- [ ] Widen beyond color: what the model puts in the frame, not only how it lights it
