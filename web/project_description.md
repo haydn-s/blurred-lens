@@ -14,8 +14,11 @@ lens: not any one picture the model made, but the picture it tends to make.
 
 ## How it works
 
-1. **One prompt template.** Every image comes from the same sentence, *"Show me {place} in
-   {country}."* Only the place and the country change.
+1. **One prompt template, one camera position.** Every image comes from the same sentence, *"A
+   photograph of {place} in {country}, {view}."* The place and the country change; the view is fixed
+   for each kind of place (for a city, *"taken at eye level from the middle of a street, looking
+   straight down the street"*). Every image is also the same size, so all the images of a prompt line
+   up and can be compared pixel by pixel.
 2. **Every country, eight kinds of place.** 197 countries (the 193 UN member states, the two UN
    observer states, Taiwan and Kosovo) times eight places (a city, a town, a village, a suburb, a
    rural area, a farm, a house and a market) makes 1,576 prompts.
@@ -62,9 +65,11 @@ prompt. Averaging many samples turns those assumptions into something you can se
 
 - **One model, one template, one language.** Other models, phrasings or languages could paint very
   different pictures.
-- **Blending still works on pixels.** Weighting by typicality drops the odd answer out, but the same
-  street drawn from two angles still blends into a blur, so composites show agreement in layout and
+- **Pixel averages ignore meaning.** A fixed camera position keeps layouts similar, but two different
+  buildings in the same spot still average into a blur, so composites show agreement in layout and
   color rather than in content.
+- **The framing is chosen for the model.** Fixing the view makes images comparable, but the model
+  never gets to show how it would frame a place on its own.
 - **A finite sample.** Each composite is built from a limited number of images, so details can shift
   as more are added.
 - **Blends flatten variety.** A composite can make a diverse set of images look uniform, which is

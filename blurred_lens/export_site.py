@@ -21,7 +21,7 @@ from PIL import Image
 
 from .composite import composite_path
 from .config import ROOT, image_files, load_config, run_dir
-from .prompts import load_json
+from .prompts import format_prompt, load_json
 
 JPEG_QUALITY = 85
 SOURCES_FILE = "sources.json"  # what each exported image was made from; the website never reads it
@@ -97,7 +97,7 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
         for p in places:
             entry = {
                 "place": p["id"],
-                "prompt": template.format(place=p["phrase"], country=c["prompt_name"]),
+                "prompt": format_prompt(template, c, p),
                 "model": None,
                 "n_images": 0,
                 "effective_images": 0,

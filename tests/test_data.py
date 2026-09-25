@@ -21,16 +21,32 @@ def test_place_ids_are_unique():
 
 
 def test_one_prompt_per_country_place_pair():
-    assert len(load_prompts(CFG)) == len(COUNTRIES) * len(PLACES)
+    countries, places = ["USA", "JPN"], ["city", "house"]
+    assert len(load_prompts(CFG, countries, places)) == len(countries) * len(places)
 
 
-def test_prompt_text_uses_prompt_name():
+def test_the_configured_scope_decides_what_a_run_covers():
+    wanted_countries = CFG["prompts"].get("countries") or [c["iso_a3"] for c in COUNTRIES]
+    wanted_places = CFG["prompts"].get("places") or [p["id"] for p in PLACES]
+
+    prompts = load_prompts(CFG)
+
+    assert {p.iso3 for p in prompts} == set(wanted_countries)
+    assert {p.place for p in prompts} == set(wanted_places)
+    assert len(prompts) == len(wanted_countries) * len(wanted_places)
+
+
+def test_every_place_has_a_camera_view():
+    assert all(p["view"].strip() for p in PLACES)
+
+
+def test_prompt_text_fills_country_place_and_view():
     [prompt] = build_prompts(
         [{"iso_a3": "USA", "prompt_name": "the United States"}],
-        [{"id": "city", "phrase": "a city"}],
-        "Show me {place} in {country}.",
+        [{"id": "city", "phrase": "a city", "view": "taken at eye level"}],
+        "A photograph of {place} in {country}, {view}.",
     )
-    assert prompt.text == "Show me a city in the United States."
+    assert prompt.text == "A photograph of a city in the United States, taken at eye level."
 
 
 def test_select_rejects_unknown_ids():
