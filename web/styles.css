@@ -306,22 +306,6 @@ img { display: block; max-width: 100%; }
 .pill-button:hover { background: var(--glass-hover); border-color: var(--line-strong); }
 .pill-button:active { scale: 0.97; }
 
-.segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; }
-.segmented button {
-  height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--ink-3);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.25s var(--ease-out), color 0.25s;
-}
-.segmented button:hover { color: var(--ink-2); }
-.segmented button[aria-pressed="true"] { background: rgb(255 255 255 / 0.12); color: var(--ink); }
-
 .gallery-head { padding: clamp(4px, 1.6dvh, 18px) var(--pad) 0; text-align: center; }
 .gallery-region { margin: 0; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
 .gallery-title { margin: 8px 0 0; font: 400 clamp(36px, 5.2vw, 68px)/1 var(--font-serif); letter-spacing: -0.012em; text-wrap: balance; }
@@ -613,3 +597,18 @@ a.pill-button { padding: 0 11px 0 16px; color: var(--ink); text-decoration: none
 @keyframes spin { to { rotate: 1turn; } }
 @keyframes pop-in { from { opacity: 0; translate: 0 -6px; } }
 @keyframes drift { to { transform: translate3d(8%, -6%, 0) scale(1.1); } }
+
+/* Cards show the images the measurements came from, and how this country compares with the rest. */
+.card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 100%; height: 100%; }
+.card-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.card-metrics { margin-top: 12px; display: grid; gap: 6px; }
+.metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.metric-label { color: var(--ink-3); font-size: 11.5px; }
+.metric-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.metric-bar { position: relative; height: 6px; border-radius: 999px; background: rgb(255 255 255 / 0.10); }
+.metric-bar::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgb(255 255 255 / 0.25); }
+.metric-bar span { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.metric-bar[data-sign="high"] span { background: linear-gradient(90deg, rgb(240 190 90 / 0.5), rgb(245 175 60)); }
+.metric-bar[data-sign="low"] span { background: linear-gradient(90deg, rgb(90 160 245), rgb(120 175 250 / 0.5)); }
+.metric-numbers { margin: 2px 0 0; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }

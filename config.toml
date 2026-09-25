@@ -76,12 +76,22 @@ output_format = "jpg"         # "webp" | "jpg" | "png"
 output_quality = 90           # 0-100
 go_fast = true                # the model's fp8 fast path; keep it the same for a whole run
 
-[composite]
-width = 512                   # images are resized to this width before averaging
+[analysis]
+# Every generated image is measured at this width, so metrics that depend on scale (edge density,
+# the haze window) stay comparable whatever size the model returned.
+width = 512
+min_spread = 3.0              # leave out near-blank frames (pixel standard deviation below this); 0 keeps all
 
 [site]
 samples_per_prompt = 8        # individual images shown per prompt on the website
 thumbnail_size = 256
+
+[report]
+# The comparison across countries. The headline metric is the one countries are ranked by; every
+# other measurement is still reported alongside it.
+metric = "cast_b"             # yellow-blue cast on the picture as a whole; higher is more yellow
+income_file = "data/income_groups.json"
+permutations = 10000          # label shuffles behind each group comparison's p-value
 
 [paths]
 outputs_dir = "outputs"

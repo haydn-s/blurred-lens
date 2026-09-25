@@ -9,8 +9,15 @@ When you ask an AI image model to *"show me a city in Nigeria,"* what does it dr
 compare with what it draws for *"a city in France,"* or *"a farm in Japan"*?
 
 Blurred Lens asks one image model the same simple question about every country on Earth, collects
-many answers to each question, and blends them into a single averaged image. The result is a kind of
-blurred lens: not any one picture the model made, but the picture it tends to make.
+many answers to each question, and measures the color of every one. The result is a kind of blurred
+lens: not any one picture the model made, but the habits behind all of them.
+
+## The question
+
+Film has a habit of coloring places. A sepia wash over Mexico, dust and amber for "somewhere
+dangerous": a yellow filter tells an audience that a place is poor, hot and unsafe before anyone
+speaks a line. An image model trained on pictures like those may have learned the habit too. This
+project measures whether it did -- and whether the countries it warms are the poorer ones.
 
 ## How it works
 
@@ -24,20 +31,24 @@ blurred lens: not any one picture the model made, but the picture it tends to ma
    rural area, a farm, a house and a market) makes 1,576 prompts.
 3. **Many samples per prompt.** An image model gives a different answer every time, so each prompt
    is sent many times. The collection reflects the model's habits rather than one lucky or unlucky draw.
-4. **Averaging.** The images for each prompt are resized and combined pixel by pixel into two composites:
-   - the **mean**, the literal average, which looks soft and ghostly;
-   - the **median**, which keeps what most images agree on and is usually sharper.
+4. **Measuring.** Every image is measured the way a colorist would describe it: the color cast over
+   the frame, its warmth in kelvin, how saturated, how dark, how hazy, how much of the picture sits in
+   amber against how much sits in blue. Each country's numbers are then compared with every other
+   country's for the same kind of place.
 
-On the globe, click a country to see its composites, the exact prompt behind each one, and some of
-the individual images that went into it.
+On the globe, click a country to see how its pictures compare, the exact prompt behind each one, and
+some of the individual images the numbers came from.
 
-## How to read a composite
+## How to read a country
 
-- **Sharp shapes and strong colors** mean the model drew the same thing again and again: a skyline,
-  a horizon, a dominant palette.
-- **Blur and gray** mean the model varied, with different layouts and different subjects.
-- **Differences between countries** are the interesting part. When the same prompt yields glass towers
-  for one country and dirt roads for another, the composites make that default visible at a glance.
+- **The figure in σ** says how far this country sits from the average country, measured in
+  country-to-country standard deviations. +1.5 is far out; ±0.3 is the middle of the pack.
+- **Warmer is lower in kelvin.** 4,000 K is the amber of a late afternoon; 7,000 K is an overcast
+  noon. A country graded a thousand kelvin below the rest is being lit differently by the model.
+- **Haze** rises with dust, smog and lifted blacks -- the look a film reaches for when it wants a
+  place to feel hot and tired.
+- **Comparisons stay inside one kind of place.** Cities are compared with cities, never with farms:
+  places differ in color for reasons that have nothing to do with which country they are in.
 
 ## Why this is an Explainable AI project
 
@@ -45,7 +56,8 @@ Explainable AI usually asks why a model produced a particular output. Blurred Le
 complementary question: what does a model assume when it is given almost nothing to go on? A prompt
 like *"a house in {country}"* leaves nearly everything unspecified, so whatever fills the gap
 (architecture, weather, wealth, crowds) comes from the model and its training data, not from the
-prompt. Averaging many samples turns those assumptions into something you can see and compare.
+prompt. Measuring many samples turns those assumptions into something you can count, rather than
+something you have to take on faith from a handful of striking examples.
 
 ## Decisions that shape the results
 
@@ -62,15 +74,19 @@ prompt. Averaging many samples turns those assumptions into something you can se
 
 - **One model, one template, one language.** Other models, phrasings or languages could paint very
   different pictures.
-- **Pixel averages ignore meaning.** A fixed camera position keeps layouts similar, but two different
-  buildings in the same spot still average into a blur, so composites show agreement in layout and
-  color rather than in content.
+- **A warm picture is not proof of a warm filter.** A sunset really in frame is warm content, and from
+  one image it looks much like a grade laid over everything. What the numbers can say is that two
+  countries' pictures of the same place, from the same prompt and the same camera position, differ --
+  and that the country name is the only thing that changed.
+- **Some places really are sunnier.** Lagos sits closer to the equator than Oslo. This project cannot
+  separate a stereotype from a climate; it can show whether the pattern follows income more closely
+  than it follows latitude.
 - **The framing is chosen for the model.** Fixing the view makes images comparable, but the model
   never gets to show how it would frame a place on its own.
-- **A finite sample.** Each composite is built from a limited number of images, so details can shift
-  as more are added.
-- **Averages flatten variety.** A composite can make a diverse set of images look uniform, which is
-  why the individual images are shown next to it.
+- **Color is not content.** These measurements describe light, not what is in the picture: who is
+  present, what they are doing, whether the buildings are whole. That is the next question, not this one.
+- **Many comparisons, small samples.** With a dozen countries and several metrics, some gap will look
+  significant by chance. The report prints how many comparisons it made, for exactly that reason.
 
 ## Status
 

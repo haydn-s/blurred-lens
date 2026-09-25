@@ -35,7 +35,7 @@ function renderHud(manifest, countries) {
     return;
   }
   const entries = countries.flatMap((c) => c.entries);
-  const done = entries.filter((e) => e.composites).length;
+  const done = entries.filter((e) => e.metrics).length;
   const images = entries.reduce((sum, e) => sum + e.n_images, 0);
   $("#hud-template").textContent = `“${manifest.template}”`;
   $("#hud-stats").textContent =
@@ -67,7 +67,7 @@ async function main() {
     onReady: hideLoader,
   });
   setTimeout(hideLoader, LOADER_FALLBACK_MS);
-  const gallery = new Gallery($("#gallery"), { places: manifest?.places ?? [], onRequestClose: closeCountry });
+  const gallery = new Gallery($("#gallery"), { places: manifest?.places ?? [], metric: manifest?.metric ?? null, onRequestClose: closeCountry });
   createSearch($(".search"), countries, { onSelect: (country) => openCountry(country.iso3) });
   // Open index.html?debug to inspect the globe and gallery from the browser console.
   if (new URLSearchParams(location.search).has("debug")) window.blurredLens = { globe, gallery, countries };

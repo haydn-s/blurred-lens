@@ -6,12 +6,13 @@ import { el, formatCount, prefersReducedMotion } from "./util.js";
 const CLOSE_MS = 480; // matches --gallery-ms in styles.css
 const WHEEL_QUIET_MS = 180; // one wheel/trackpad gesture moves one card
 const SUPPORTS_SCROLLEND = "onscrollend" in window;
-const METHOD_LABELS = { mean: "Mean", median: "Median" };
+const METRIC_SPAN = 3; // z-scores past three standard deviations fill the bar
 
 export class Gallery {
-  constructor(root, { places, onRequestClose }) {
+  constructor(root, { places, metric, onRequestClose }) {
     this.root = root;
     this.placeLabels = new Map(places.map((p) => [p.id, p.label]));
+    this.metric = metric ?? null; // which measurement the z-scores describe
     this.onRequestClose = onRequestClose;
     this.track = root.querySelector(".gallery-track");
     this.tabs = root.querySelector(".gallery-tabs");
@@ -20,11 +21,9 @@ export class Gallery {
     this.summary = root.querySelector(".gallery-summary");
     this.prevButton = root.querySelector('[data-action="prev"]');
     this.nextButton = root.querySelector('[data-action="next"]');
-    this.methodButtons = [...root.querySelectorAll("[data-method]")];
 
     this.country = null;
-    this.method = "mean";
-    this.cards = []; // { node, frame, image, count, entry }
+    this.cards = []; // { node, frame, count, entry }
     this.tabButtons = [];
     this.index = 0;
     this.targetIndex = null; // set while a programmatic scroll is running
@@ -63,7 +62,7 @@ export class Gallery {
     this.root.getBoundingClientRect(); // commit the un-hide before starting the transition
     this.root.classList.add("is-open");
     document.addEventListener("keydown", this.handleKey);
-    this.go(Math.max(0, country.entries.findIndex((e) => e.composites)), false);
+    this.go(Math.max(0, country.entries.findIndex((e) => e.metrics)), false);
     this.root.querySelector('[data-action="close"]').focus({ preventScroll: true });
   }
 
@@ -86,16 +85,21 @@ export class Gallery {
     this.cards = country.entries.map((entry, i) => {
       const label = this.placeLabels.get(entry.place) ?? entry.place;
       const frame = el("div", { class: "card-frame" });
-      let image = null;
-      if (entry.composites) {
-        image = el("img", { class: "card-image", decoding: "async", draggable: "false" });
-        image.addEventListener("load", () => frame.classList.add("is-loaded"));
-        frame.append(image);
+      const count = el("span", { class: "card-count" });
+      if (entry.metrics) {
+        // No composite any more: the frame shows a few of the images the numbers came from.
+        frame.append(el("div", { class: "card-grid" },
+          ...entry.samples.slice(0, 4).map((s) =>
+            el("img", { src: `data/${s.image}`, alt: `One of the images generated for “${entry.prompt}”`,
+                        loading: "lazy", decoding: "async", draggable: "false" })),
+        ));
+        frame.classList.add("is-loaded");
+        count.textContent = `${formatCount(entry.n_images)} images measured`;
       } else {
         frame.classList.add("is-empty");
         frame.append(el("span", { class: "card-empty-label" }, "Not generated yet"));
+        count.textContent = "Awaiting generation";
       }
-      const count = el("span", { class: "card-count" });
       const sources = entry.samples.map((s) =>
         el("img", { src: `data/${s.image}`, alt: "", loading: "lazy", draggable: "false", title: s.revised_prompt ?? entry.prompt }),
       );
@@ -105,45 +109,40 @@ export class Gallery {
           el("figcaption", { class: "card-caption" },
             el("div", { class: "card-heading" }, el("span", { class: "card-place" }, label), count),
             el("p", { class: "card-prompt" }, `“${entry.prompt}”`),
-            sources.length ? el("div", { class: "card-sources", title: "Some of the images behind this composite" }, ...sources) : null,
+            this.measurements(entry),
+            sources.length ? el("div", { class: "card-sources", title: "Some of the images these numbers came from" }, ...sources) : null,
           ),
         ),
       );
-      return { node, frame, image, count, entry };
+      return { node, frame, count, entry };
     });
-    this.cards.forEach((card) => this.showMethod(card));
     this.track.replaceChildren(...this.cards.map((card) => card.node));
     this.track.scrollLeft = 0;
   }
 
+  // How this prompt's images compare with every other country's images of the same place.
+  measurements(entry) {
+    if (!entry.metrics) return null;
+    const rows = [];
+    if (this.metric && typeof entry.z === "number") {
+      rows.push(
+        el("div", { class: "metric-head" },
+          el("span", { class: "metric-label" }, this.metric.label),
+          el("span", { class: "metric-value" }, `${entry.z >= 0 ? "+" : ""}${entry.z.toFixed(2)}σ`)),
+        metricBar(entry.z),
+      );
+    }
+    const numbers = metricNumbers(entry.metrics);
+    if (numbers) rows.push(el("p", { class: "metric-numbers" }, numbers));
+    return rows.length ? el("div", { class: "card-metrics" }, ...rows) : null;
+  }
+
   renderTabs(country) {
     this.tabButtons = country.entries.map((entry, i) =>
-      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.composites },
+      el("button", { class: "tab", type: "button", "data-index": i, "data-empty": !entry.metrics },
         this.placeLabels.get(entry.place) ?? entry.place),
     );
     this.tabs.replaceChildren(...this.tabButtons);
-  }
-
-  showMethod({ frame, image, count, entry }) {
-    if (!entry.composites) {
-      count.textContent = "Awaiting generation";
-      return;
-    }
-    const label = METHOD_LABELS[this.method];
-    count.textContent = `${label} of ${formatCount(entry.n_images)} images`;
-    image.alt = `${label} of ${formatCount(entry.n_images)} AI-generated images for “${entry.prompt}”`;
-    const src = `data/${entry.composites[this.method]}`;
-    if (image.getAttribute("src") !== src) {
-      frame.classList.remove("is-loaded");
-      image.src = src;
-    }
-  }
-
-  setMethod(method) {
-    if (method === this.method) return;
-    this.method = method;
-    for (const button of this.methodButtons) button.setAttribute("aria-pressed", String(button.dataset.method === method));
-    this.cards.forEach((card) => this.showMethod(card));
   }
 
   // ---- Navigation ----------------------------------------------------------
@@ -206,11 +205,10 @@ export class Gallery {
   handleClick(e) {
     const button = e.target.closest("button");
     if (button) {
-      const { action, method, index } = button.dataset;
+      const { action, index } = button.dataset;
       if (action === "close") this.onRequestClose();
       else if (action === "prev") this.go(this.index - 1);
       else if (action === "next") this.go(this.index + 1);
-      else if (method) this.setMethod(method);
       else if (index !== undefined) this.go(Number(index));
       return;
     }
@@ -243,6 +241,23 @@ export class Gallery {
     e.preventDefault();
     action();
   }
+}
+
+// A z-score drawn from the middle out: left of center is below the average country, right is above.
+function metricBar(z) {
+  const clamped = Math.max(-METRIC_SPAN, Math.min(METRIC_SPAN, z));
+  const half = (Math.abs(clamped) / METRIC_SPAN) * 50;
+  return el("div", { class: "metric-bar", "data-sign": clamped < 0 ? "low" : "high" },
+    el("span", { style: `left: ${clamped < 0 ? 50 - half : 50}%; width: ${half}%` }));
+}
+
+function metricNumbers(metrics) {
+  const parts = [];
+  if (metrics.cast_kelvin) parts.push(`${Math.round(metrics.cast_kelvin / 10) * 10} K`);
+  if (metrics.haze !== undefined) parts.push(`haze ${metrics.haze.toFixed(2)}`);
+  if (metrics.lightness !== undefined) parts.push(`lightness ${Math.round(metrics.lightness)}`);
+  if (metrics.colorfulness !== undefined) parts.push(`color ${Math.round(metrics.colorfulness)}`);
+  return parts.join(" · ");
 }
 
 const totalImages = (country) => country.entries.reduce((sum, e) => sum + e.n_images, 0);
