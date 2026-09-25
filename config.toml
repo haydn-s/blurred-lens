@@ -3,35 +3,78 @@
 [prompts]
 # {place} and {view} come from data/places.json ("phrase", "view"), {country} from data/countries.json
 # ("prompt_name"). {view} fixes the camera position for each kind of place, so every image of a prompt
-# shares one perspective and the images line up when they are averaged.
-template = "A photograph of {place} in {country}, {view}."
+# shares one perspective and the images line up when they are compared.
 countries_file = "data/countries.json"
 places_file = "data/places.json"
 
+# Which condition `generate` uses when --condition says nothing. See [prompts.conditions] below.
+condition = "free"
+
 # The scope of a run: which entries of those files it uses. Empty lists mean all of them, and
-# --countries / --places override these. Phase 1 is a proof of concept -- 10 countries x 3 places,
-# chosen to span regions and income levels -- and the whole set will be regenerated from scratch
-# when the full run is funded, so these images never mix with the later ones.
+# --countries / --places override these. A baseline condition ignores the country list.
+#
+# Phase 2: 48 countries, 12 in each World Bank income group (data/income_groups.json), chosen so the
+# income question can be asked without latitude answering it. Across all 195 countries with an income
+# group, the rich ones sit far from the equator and the poor ones near it (mean |latitude| 37° for
+# high income against 14° for low income), so "warmer because poorer" would be impossible to tell
+# apart from "warmer because closer to the equator". This set deliberately breaks that tie: hot
+# high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago, Barbados, the UAE, Saudi
+# Arabia) against cool or highland low- and lower-middle-income ones (North Korea, Syria, Afghanistan,
+# Mongolia, Kyrgyzstan, Uzbekistan, Nepal, Bolivia, Lesotho, the Ethiopian and Rwandan highlands). It
+# leaves the income groups nearly level on latitude -- mean |latitude| 25°, 23°, 23°, 19° from high to
+# low, a 6° spread where the world's is 23° -- and puts all four income groups in every latitude band,
+# so latitude can be controlled for rather than merely hoped about. Countries are the unit of the
+# statistical test, so 48 of them with fewer images each buys more than 13 with more.
 countries = [
-  "USA", "MEX", "BRA", "PER",   # Americas
-  "NOR", "DEU", "ESP",          # Europe
-  "JPN", "IND", "AFG",          # Asia
-  "NGA", "KEN",                 # Africa
-  "AUS",                        # Oceania
+  # High income
+  "SGP", "PAN", "CRI", "TTO", "BRB", "ARE", "SAU", "AUS", "JPN", "USA", "DEU", "NOR",
+  # Upper middle income
+  "IDN", "ECU", "PER", "BRA", "THA", "MEX", "DZA", "ZAF", "IRN", "CHN", "TUR", "MNG",
+  # Lower middle income
+  "KEN", "TZA", "NGA", "BOL", "ZWE", "IND", "EGY", "NPL", "LSO", "MAR", "KGZ", "UZB",
+  # Low income
+  "UGA", "RWA", "ETH", "TCD", "YEM", "MLI", "NER", "MOZ", "MDG", "AFG", "SYR", "PRK",
 ]
 places = ["city", "village", "house"]
 
+# A condition is a prompt template, and it is the one thing a run is allowed to vary. Each condition
+# writes to its own run folder (outputs/<run_name>-<condition>/), so two sentences can never end up in
+# the same average, and `generate --condition <name>` picks one.
+#
+#   free            what the model does when only the country, the place and the camera are fixed.
+#   noon            the same sentence with the light pinned: same hour, same sky, same sun height.
+#                   The free run cannot tell a grade from a scene choice -- a country that measures
+#                   warm may be warm because the model reached for golden hour. Nothing here names a
+#                   color, so if the warmth gap survives this control it is a grade laid over the
+#                   frame rather than the time of day the model chose to draw.
+#   baseline        the same places with no country at all: the model's own default picture of a city,
+#                   a village, a house. One prompt per place, filed under _none, so each country can
+#                   be read as a deviation from that default and not only from the average country.
+#                   Its run folder holds no countries, so `report` has nothing to rank there; the
+#                   numbers live in analysis/_none/<place>.json.
+#   baseline_noon   the baseline under the same pinned light, so a light-controlled country has a
+#                   light-controlled default to be compared with.
+#
+# Keep this table last in [prompts]: in TOML every key after a sub-table header belongs to it.
+[prompts.conditions]
+free = "A photograph of {place} in {country}, {view}."
+noon = "A photograph of {place} in {country}, {view}, at noon under a clear sky with the sun high overhead."
+baseline = "A photograph of {place}, {view}."
+baseline_noon = "A photograph of {place}, {view}, at noon under a clear sky with the sun high overhead."
+
 [generation]
-# Output folder under outputs/. Start a new name whenever you change the model, template
-# or size, so images from different setups are never averaged together.
-run_name = "poc-event"
+# Output folder under outputs/. The condition is appended (outputs/phase2-free, outputs/phase2-noon,
+# ...), so a template change always lands in its own folder. Start a new name whenever you change the
+# model or the size, so images from different setups are never compared.
+run_name = "phase2"
 images_per_prompt = 500       # target per prompt; with a budget, the most the budget may buy
 
 # Budget: the most this run may cost in total (USD), counting images already on disk. It is split
-# evenly: every prompt gets the same number of images, as many as the budget allows, so every
-# country and place gets a composite and the composites stay comparable. Raise it later and a
-# re-run tops every prompt up. 0 = no budget (generate images_per_prompt). Needs price_per_image_usd.
-budget_usd = 65.0             # phase 1 needs $58.50; the cap is what stops a mistake costing more
+# evenly: every prompt gets the same number of images, so every country and place is measured from the
+# same sample size and the comparison stays fair. Raise it later and a re-run tops every prompt up.
+# 0 = no budget (generate images_per_prompt). Needs price_per_image_usd. The budget is per run, and
+# each condition is a run, so four conditions cost four budgets.
+budget_usd = 25.0             # the pilot; raise it once the pilot says how many images a prompt needs
 min_images_per_prompt = 20    # a budget that buys fewer than this per prompt is refused
 
 # Replicate (https://replicate.com). The API token decides which account pays, so use a token
@@ -42,26 +85,37 @@ api_key_env = "REPLICATE_API_TOKEN"
 price_per_image_usd = 0.003   # flux-schnell: $3 per 1,000 output images
 count_param = "num_outputs"   # the model input that asks for several images in one prediction
 wait_seconds = 60             # "Prefer: wait" holds the request open until the prediction is done
+
+# The exact model version every image of this run must come from. Replicate reports the version that
+# answered each prediction; if it ever differs from this, the run stops instead of quietly mixing two
+# models' pictures into one measurement. Read the current one at
+# https://replicate.com/black-forest-labs/flux-schnell/api (or GET /v1/models/<owner>/<model>).
+# Empty = don't pin, but still stop if the version changes part-way through a run.
+model_version = "c846a69991daf4c0e5d016514849d14ee5b2e6846ce6b9d6f21369e564cfe51e"
+
+# Reproducibility: image i of every prompt is generated with seed seed_base + i, and the seed is
+# written into metadata.jsonl, so any single image can be made again. The seed depends on the image
+# number alone, not on the country or the condition, so image 7 of Norway's city, of Nigeria's city
+# and of the no-country baseline all start from the same noise: the country name is then the only
+# difference between them, in the sampling as well as in the sentence.
+# 0 = no seed (the model picks its own). Needs images_per_request = 1, because a model handed one seed
+# for a batch of four decides the other three itself.
+seed_base = 1000
+seed_param = "seed"           # the model input that takes it ("" if the model has none)
+
 # An OpenAI-compatible /images/generations endpoint instead (OpenAI, a LiteLLM gateway, ...):
 # provider = "openai"
 # base_url = "https://api.openai.com/v1"
 # api_key_env = "OPENAI_API_KEY"
 # model = "gpt-image-1-mini"
 
-# Every image in a run is saved at exactly this size. It is sent with each request, and an image
-# that comes back at another size is center-cropped and resized (its returned size is logged).
-# 1024x1024 is supported by every major image model.
+# Every image in a run is saved at exactly this size. It is sent with each request, and an image that
+# comes back at another size is center-cropped and resized (its returned size is logged). One size for
+# the whole project: the measurements are scale-sensitive, 1024x1024 is supported by every major image
+# model, and on flux-schnell a square megapixel costs no more than a quarter of one.
 size = "1024x1024"
-# OPEN QUESTION -- settle this before generating; it is cheap to change now and expensive after.
-#   - Every image of a prompt must share one size or the composites cannot be averaged. Different
-#     places could use different shapes (composites never mix places), but that needs per-place input.
-#   - A street or a horizon may read better wide (16:9, 3:2) than square; a house facade may not.
-#   - Composites are built at composite.width (512) and thumbnails at 256, so 1024 already exceeds
-#     what they need -- but the site's sample images and any later pixel-level analysis want it.
-#   - On flux-schnell the price is the same at 0.25 or 1 megapixel, so only disk and download change.
-#   - Changing it after a run means regenerating that run: images cannot be upscaled back.
 quality = "low"               # openai provider only: gpt-image-* low | medium | high
-images_per_request = 4        # images per request (flux-schnell: num_outputs allows 1-4)
+images_per_request = 1        # images per request; 1 is required while seed_base is set
 concurrency = 8               # requests in flight at once
 requests_per_minute = 300     # client-side throttle; Replicate allows 600 predictions/min
 save_format = "jpeg"          # jpeg | webp | png (png is ~6x larger on disk)

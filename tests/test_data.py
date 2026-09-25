@@ -1,7 +1,11 @@
+import json
+from collections import Counter
+
 import pytest
 
-from blurred_lens.config import load_config
-from blurred_lens.prompts import build_prompts, load_json, load_prompts, select
+from blurred_lens.config import ROOT, load_config
+from blurred_lens.prompts import (NO_COUNTRY, build_prompts, conditions, load_json, load_prompts,
+                                  names_a_country, select)
 
 CFG = load_config()
 COUNTRIES = load_json(CFG["prompts"]["countries_file"])
@@ -52,3 +56,65 @@ def test_prompt_text_fills_country_place_and_view():
 def test_select_rejects_unknown_ids():
     with pytest.raises(ValueError, match="ctiy"):
         select(PLACES, ["ctiy"], "id")
+
+
+def test_every_country_has_a_latitude_to_control_for():
+    """Latitude is the rival explanation for warmth, so every country carries one."""
+    for c in COUNTRIES:
+        assert isinstance(c["latitude"], (int, float)), c
+        assert -90 <= c["latitude"] <= 90, c
+
+
+def test_every_condition_fixes_the_place_and_the_camera():
+    for name, template in conditions(CFG).items():
+        assert "{place}" in template and "{view}" in template, name
+
+
+def test_a_baseline_condition_leaves_the_country_out_and_collapses_to_one_prompt_per_place():
+    """The model's own default picture of a place: no country in the sentence, none in the folders."""
+    baseline = [name for name, t in conditions(CFG).items() if not names_a_country(t)]
+    assert baseline, "no no-country baseline to compare countries against"
+    for name in baseline:
+        prompts = load_prompts(CFG, condition=name)
+        assert {p.iso3 for p in prompts} == {NO_COUNTRY}
+        assert len(prompts) == len(CFG["prompts"]["places"])
+        assert not any(c["prompt_name"] in prompts[0].text for c in COUNTRIES)
+
+
+def test_the_light_controlled_condition_pins_the_light_without_naming_a_colour():
+    """If it named a colour it would control the grade too, and the comparison would prove nothing."""
+    free, noon = conditions(CFG)["free"], conditions(CFG)["noon"]
+    assert noon.startswith(free.rstrip(".")), "the control must be the free sentence plus the light"
+    added = noon[len(free.rstrip(".")):].lower()
+    assert "noon" in added
+    for colour in ("warm", "cool", "neutral", "golden", "amber", "blue", "kelvin", "white balance"):
+        assert colour not in added, f"the light control must not name a colour: {colour!r}"
+
+
+def test_the_run_scope_spans_every_income_group():
+    income = json.loads((ROOT / CFG["report"]["income_file"]).read_text())
+    groups = Counter(income["countries"].get(iso3) for iso3 in CFG["prompts"]["countries"])
+    assert None not in groups, "every country in the run needs a World Bank income group"
+    assert set(groups) == set(income["labels"]), "every income group must be represented"
+    assert max(groups.values()) - min(groups.values()) <= 2, groups
+
+
+def test_the_run_scope_breaks_the_tie_between_income_and_latitude():
+    """Otherwise "warmer" could only ever mean "closer to the equator"."""
+    income = json.loads((ROOT / CFG["report"]["income_file"]).read_text())
+    latitude = {c["iso_a3"]: abs(c["latitude"]) for c in COUNTRIES}
+
+    def gap(codes: list[str]) -> float:
+        by_group: dict[str, list[float]] = {}
+        for iso3 in codes:
+            by_group.setdefault(income["countries"][iso3], []).append(latitude[iso3])
+        means = {g: sum(v) / len(v) for g, v in by_group.items()}
+        return means["HIC"] - means["LIC"]
+
+    world = [iso3 for iso3 in latitude if income["countries"].get(iso3)]
+    assert gap(CFG["prompts"]["countries"]) < gap(world) / 2
+
+    # And every part of the range holds rich and poor countries, so latitude can be controlled for.
+    for low, high in ((0, 20), (20, 90)):
+        band = [iso3 for iso3 in CFG["prompts"]["countries"] if low <= latitude[iso3] < high]
+        assert len({income["countries"][iso3] for iso3 in band}) == 4, (low, high, band)

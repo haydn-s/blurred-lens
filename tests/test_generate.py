@@ -4,8 +4,9 @@ import pytest
 from PIL import Image
 
 from blurred_lens import generate
+from blurred_lens.config import load_config
 from blurred_lens.generate import (ReplicateBackend, images_within_budget, parse_size, plan_jobs,
-                                   run_cost, save_image)
+                                   run_cost, save_image, seeds_for)
 from blurred_lens.prompts import Prompt
 
 
@@ -66,7 +67,7 @@ def replicate_backend(monkeypatch):
     monkeypatch.setenv("REPLICATE_API_TOKEN", "r8_not_a_real_token")
     return ReplicateBackend({
         "model": "owner/model", "api_key_env": "REPLICATE_API_TOKEN",
-        "count_param": "num_outputs", "input": {"aspect_ratio": "1:1"},
+        "count_param": "num_outputs", "seed_param": "seed", "input": {"aspect_ratio": "1:1"},
     })
 
 
@@ -148,3 +149,97 @@ def test_replicate_reports_the_version_and_prediction_id_for_the_log(monkeypatch
     assert info["version"] == "c846a699"
     assert info["predict_time"] == 1.25
     assert info["provider"] == "replicate"
+
+
+def test_the_seed_is_the_image_number_so_countries_share_their_noise():
+    """Image 7 of every prompt starts from the same noise, whatever country or condition it is."""
+    g = {"seed_base": 1000}
+    assert seeds_for(g, [1, 2, 7]) == [1001, 1002, 1007]
+    assert seeds_for({"seed_base": 0}, [1, 2]) == [None, None]
+
+
+def test_replicate_sends_the_seed_as_the_models_own_input(monkeypatch):
+    sent = []
+    backend = replicate_backend(monkeypatch)
+    backend.request = lambda url, body=None: sent.append(body) or {
+        "status": "succeeded", "output": ["https://out/1.jpg"]}
+    backend.download = lambda url: b"image"
+
+    backend.generate("a city in Nigeria", 1, seed=1007)
+
+    assert sent[0]["input"]["seed"] == 1007
+
+
+def test_a_model_without_a_seed_input_is_sent_none(monkeypatch):
+    sent = []
+    backend = replicate_backend(monkeypatch)
+    backend.seed_param = ""
+    backend.request = lambda url, body=None: sent.append(body) or {
+        "status": "succeeded", "output": ["https://out/1.jpg"]}
+    backend.download = lambda url: b"image"
+
+    backend.generate("a city in Nigeria", 1, seed=1007)
+
+    assert "seed" not in sent[0]["input"]
+
+
+def test_a_model_update_part_way_through_a_run_stops_it(monkeypatch):
+    """Two versions in one run would be two models measured as one, so this is fatal, not a warning."""
+    backend = replicate_backend(monkeypatch)
+    backend.version = "c846a699"
+    backend.request = lambda url, body=None: {
+        "status": "succeeded", "output": ["https://out/1.jpg"], "version": "c846a699"}
+    backend.download = lambda url: b"image"
+    backend.generate("a city in Nigeria", 1)  # the pinned version is fine
+
+    backend.request = lambda url, body=None: {
+        "status": "succeeded", "output": ["https://out/1.jpg"], "version": "deadbeef"}
+    with pytest.raises(generate.FatalError, match="deadbeef"):
+        backend.generate("a city in Nigeria", 1)
+
+
+def test_without_a_pin_the_first_version_seen_becomes_the_pin(monkeypatch):
+    backend = replicate_backend(monkeypatch)
+    backend.version = ""
+    version = ["first"]
+    backend.request = lambda url, body=None: {
+        "status": "succeeded", "output": ["https://out/1.jpg"], "version": version[0]}
+    backend.download = lambda url: b"image"
+
+    backend.generate("a city in Nigeria", 1)
+    version[0] = "second"
+    with pytest.raises(generate.FatalError, match="second"):
+        backend.generate("a city in Nigeria", 1)
+
+
+def test_seeding_a_batched_request_is_refused(monkeypatch, capsys):
+    """One seed for four images means three seeds the model picked and metadata cannot record."""
+    cfg = load_config()
+    cfg["generation"] = {**cfg["generation"], "seed_base": 1000, "images_per_request": 4}
+    monkeypatch.setattr(generate, "load_config", lambda: cfg)
+
+    with pytest.raises(SystemExit, match="images_per_request"):
+        generate.main(["--dry-run"])
+
+
+def test_each_condition_writes_to_its_own_run_folder(monkeypatch, capsys):
+    """A template change must never top up a folder generated from another sentence."""
+    folders = set()
+    for condition in ("free", "noon", "baseline"):
+        generate.main(["--dry-run", "--condition", condition, "--n", "2"])
+        plan = capsys.readouterr().out
+        folders.add(next(line.split()[-1] for line in plan.splitlines() if "Output folder" in line))
+    assert len(folders) == 3, folders
+
+
+def test_a_model_already_updated_is_caught_before_anything_is_spent(monkeypatch):
+    """Reading the model costs nothing, so the pin is checked before the first prediction."""
+    backend = replicate_backend(monkeypatch)
+    backend.version = "c846a699"
+    backend.request = lambda url, body=None: {"latest_version": {"id": "deadbeef"}}
+
+    with pytest.raises(SystemExit, match="deadbeef"):
+        backend.preflight()
+
+    backend.request = lambda url, body=None: {"latest_version": {"id": "c846a699"}}
+    backend.preflight()  # unchanged: nothing to say

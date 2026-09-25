@@ -21,7 +21,7 @@ from PIL import Image
 
 from .analyze import analysis_path, read_metadata
 from .config import ROOT, image_files, load_config, run_dir
-from .prompts import format_prompt, load_json
+from .prompts import format_prompt, load_json, template_for
 
 JPEG_QUALITY = 85
 SOURCES_FILE = "sources.json"  # what each exported image was made from; the website never reads it
@@ -80,7 +80,9 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
     report_path = out / "analysis" / "report.json"
     report = json.loads(report_path.read_text()) if report_path.exists() else None
 
-    template = cfg["prompts"]["template"]
+    # The template of prompts.condition: what an ungenerated prompt would say. A prompt that has
+    # been measured replaces this with the sentence generate actually recorded for it.
+    _, template = template_for(cfg)
     n_samples, thumb = cfg["site"]["samples_per_prompt"], cfg["site"]["thumbnail_size"]
     places = load_json(cfg["prompts"]["places_file"])
     exporter = Exporter(site)
