@@ -1,9 +1,10 @@
 """Generate images for every (country, place) prompt through an image-generation API.
 
-    python -m blurred_lens.generate --dry-run      # plan only: counts, cost, time, disk
-    python -m blurred_lens.generate --countries FRA,NGA,JPN --places city,farm --n 5
-    python -m blurred_lens.generate --budget 1000  # spread $1,000 evenly over every prompt
-    python -m blurred_lens.generate                # everything in config.toml
+    python -m blurred_lens.generate --dry-run              # plan only: counts, cost, time, disk
+    python -m blurred_lens.generate --countries FRA,NGA --places city,farm --n 5
+    python -m blurred_lens.generate --condition noon       # the light-controlled template
+    python -m blurred_lens.generate --budget 1000          # spread $1,000 evenly over every prompt
+    python -m blurred_lens.generate                        # everything in config.toml
 
 Resumable: images already on disk are skipped, so re-running continues where the last
 run stopped. Requests go out breadth-first (image 1 of every prompt, then image 2, ...),
@@ -11,9 +12,23 @@ so a run cut short by a budget or rate limit leaves every prompt with about the 
 number of images instead of a few finished prompts and many empty ones.
 
 A budget (generation.budget_usd, or --budget) decides how many images each prompt gets:
-it is split evenly, so every country and place ends up with a composite built from the
-same number of images. Every image is saved at exactly generation.size, and each place
-fixes the camera position, so one prompt's images line up when they are averaged.
+it is split evenly, so every country and place is measured from the same sample size.
+Every image is saved at exactly generation.size, and each place fixes the camera
+position, so one prompt's images differ only because the prompt does.
+
+One run, one sentence. A condition (see [prompts.conditions]) is a prompt template, and
+each one writes to outputs/<run_name>-<condition>/, so the light-controlled images, the
+free ones and the no-country baseline can never be averaged together by accident. The
+later steps take that folder with --run:
+
+    python -m blurred_lens.generate --condition noon
+    python -m blurred_lens.analyze --run phase2-noon
+    python -m blurred_lens.report  --run phase2-noon
+
+Two things make a run repeatable: image i of every prompt is generated with the seed
+generation.seed_base + i, recorded in metadata.jsonl, and generation.model_version says
+which model version this run's numbers came from -- if Replicate ever answers with
+another one, the run stops rather than quietly measuring two models at once.
 """
 
 import argparse
@@ -36,7 +51,7 @@ from PIL import Image, ImageOps
 from tqdm import tqdm
 
 from .config import IMAGE_RE, ROOT, load_config, run_dir
-from .prompts import Prompt, load_prompts
+from .prompts import NO_COUNTRY, Prompt, load_prompts, template_for
 
 EXTENSIONS = {"jpeg": "jpg", "webp": "webp", "png": "png"}
 TYPICAL_BYTES = {"jpeg": 250_000, "webp": 150_000, "png": 1_600_000}  # rough size of one 1024x1024 image
@@ -145,17 +160,26 @@ def human_minutes(minutes: float) -> str:
 
 
 def print_plan(g: dict, prompts: list[Prompt], jobs: list[Job], n_per_prompt: int, out: Path,
-               budget: float, have: list[int]) -> None:
+               budget: float, have: list[int], condition: str, template: str) -> None:
     todo = sum(len(j.indices) for j in jobs)
     target = len(prompts) * n_per_prompt
     price = g.get("price_per_image_usd") or 0
     rpm = g.get("requests_per_minute") or 0
-    n_countries, n_places = len({p.iso3 for p in prompts}), len({p.place for p in prompts})
+    places = {p.place for p in prompts}
+    countries = {p.iso3 for p in prompts} - {NO_COUNTRY}
+    scope = f"{len(countries)} countries" if countries else "no country"
     total = run_cost(have, n_per_prompt, price)
+    version = g.get("model_version") or ""
+    seed_base = g.get("seed_base") or 0
     rows = [
+        ("Condition", f"{condition}  ·  {template}"),
         ("Output folder", os.path.relpath(out, ROOT)),
         ("Model", f"{g.get('provider') or 'replicate'} · {g['model'] or '(not set)'} · {g['size']}"),
-        ("Prompts", f"{len(prompts):,}  ({n_countries} countries × {n_places} places)"),
+        ("Model version", f"{version[:12]}… (pinned)" if version
+         else "not pinned; the first version seen must hold for the whole run"),
+        ("Seeds", f"{seed_base + 1}–{seed_base + n_per_prompt} (seed_base + image number), "
+                  f"the same for every prompt" if seed_base else "none (the model picks its own)"),
+        ("Prompts", f"{len(prompts):,}  ({scope} × {len(places)} places)"),
         *([("Budget", f"${budget:,.2f} buys {n_per_prompt:,} per prompt · run total ${total:,.2f} "
                       f"· ${budget - total:,.2f} left over")] if budget else []),
         ("Target images", f"{target:,}  ({n_per_prompt:,} per prompt)"),
@@ -167,6 +191,7 @@ def print_plan(g: dict, prompts: list[Prompt], jobs: list[Job], n_per_prompt: in
          else "unknown (no requests_per_minute limit)"),
         ("Est. disk", f"~{human_bytes(todo * TYPICAL_BYTES[g['save_format']])}  (as {g['save_format']})"),
         ("Example prompt", f'"{prompts[0].text}"' if prompts else "(none)"),
+        ("Then measure it", f"python -m blurred_lens.analyze --run {out.name}"),
     ]
     width = max(len(label) for label, _ in rows)
     print("\n".join(f"  {label:<{width}}  {value}" for label, value in rows), flush=True)
@@ -205,7 +230,7 @@ class ReplicateBackend:
     POST /v1/models/{owner}/{name}/predictions. `Prefer: wait` holds the request open until the
     prediction finishes, so a fast model usually needs no polling. Every model has its own input
     schema, so the inputs come from the [generation.input] table in config.toml rather than from
-    this code; only the prompt and the number of images are filled in here.
+    this code; only the prompt, the number of images and the seed are filled in here.
     """
 
     def __init__(self, g: dict):
@@ -213,10 +238,58 @@ class ReplicateBackend:
         self.token = api_key(g)
         self.wait = max(1, min(int(g.get("wait_seconds") or 60), 60))  # Prefer: wait accepts 1-60
         self.count_param = g.get("count_param") or "num_outputs"
+        self.seed_param = g.get("seed_param") or ""
         self.input = dict(g.get("input") or {})
+        self.version = (g.get("model_version") or "").strip()
+        self.seen_version: str | None = None
+        self.version_lock = threading.Lock()
 
-    def generate(self, prompt: str, n: int) -> list[tuple[bytes, str | None]]:
+    def preflight(self) -> None:
+        """Check the pinned version before anything is spent, not after.
+
+        Reading a model's metadata is free and creates no prediction, so this is the cheap half of
+        the guarantee: if Replicate would already serve a different version than this run is pinned
+        to, say so now rather than after the first few hundred images. check_version below is the
+        other half, for a model that changes while the run is in flight.
+        """
+        if not self.version:
+            return
+        current = (self.request(f"{REPLICATE_API}/models/{self.model}").get("latest_version") or {}).get("id")
+        if current and current != self.version:
+            raise SystemExit(
+                f"\ngeneration.model_version pins {self.version[:12]}…, but Replicate now serves "
+                f"{current[:12]}… for {self.model}.\nThe model was updated, and these images would "
+                f"not match any already measured under the pin. Either keep the old run as it is "
+                f"and start a new generation.run_name with model_version = \"{current}\", or clear "
+                f"the pin to accept whatever Replicate serves.")
+
+    def check_version(self, version: str | None) -> None:
+        """Stop the run if Replicate answered with a model version other than this run's.
+
+        Replicate can update a model under its own name, which would change what the numbers
+        measure without changing anything visible on disk. generation.model_version pins the
+        version this run is allowed to use; with no pin, the first version seen becomes the pin for
+        the rest of the run. Either way a change is fatal rather than a warning, because a run that
+        half predates an update is not one measurement.
+        """
+        if not version:
+            return
+        with self.version_lock:
+            expected = self.version or self.seen_version
+            if not expected:
+                self.seen_version = version
+                return
+        if version != expected:
+            raise FatalError(
+                f"Replicate answered with model version {version}, not {expected}. The model was "
+                f"updated, so these images would not be the ones already on disk. Start a new "
+                f"generation.run_name for the new version, or set generation.model_version to the "
+                f"one you mean to measure.")
+
+    def generate(self, prompt: str, n: int, seed: int | None = None) -> Generated:
         body = {"input": {"prompt": prompt, **self.input, self.count_param: n}}
+        if seed is not None and self.seed_param:
+            body["input"][self.seed_param] = seed
         prediction = self.request(f"{REPLICATE_API}/models/{self.model}/predictions", body)
         deadline = time.monotonic() + POLL_TIMEOUT
         while prediction.get("status") in ("starting", "processing"):
@@ -233,6 +306,7 @@ class ReplicateBackend:
         urls = [output] if isinstance(output, str) else [u for u in output if isinstance(u, str)]
         if not urls:
             raise RuntimeError("prediction succeeded but returned no image")
+        self.check_version(prediction.get("version"))
         # Replicate deletes prediction outputs after an hour, so download them now.
         return Generated(
             images=[(self.download(url), None) for url in urls],
@@ -293,13 +367,17 @@ class OpenAIBackend:
 
     FATAL = (openai.AuthenticationError, openai.PermissionDeniedError, openai.NotFoundError)
 
+    def preflight(self) -> None:
+        """Nothing to check: /images/generations has no version to pin."""
+
     def __init__(self, g: dict):
         self.g = g
         # The SDK itself retries rate limits (429), server errors and timeouts with backoff.
         self.client = openai.OpenAI(api_key=api_key(g), base_url=g.get("base_url"),
                                     max_retries=5, timeout=300)
 
-    def generate(self, prompt: str, n: int) -> list[tuple[bytes, str | None]]:
+    def generate(self, prompt: str, n: int, seed: int | None = None) -> Generated:
+        """`seed` is accepted and ignored: /images/generations has no seed input."""
         g = self.g
         kwargs = {"model": g["model"], "prompt": prompt, "n": n, "size": g["size"]}
         if g.get("quality"):
@@ -360,7 +438,17 @@ def save_image(data: bytes, path: Path, fmt: str, size: tuple[int, int]) -> str:
     return returned
 
 
-def run(jobs: list[Job], backend, g: dict, out: Path) -> None:
+def seeds_for(g: dict, indices: list[int]) -> list[int | None]:
+    """The seed for each image number: seed_base + the number, so it is the same for every prompt.
+
+    Image 7 of Norway's city, of Nigeria's city and of the no-country baseline then all start from
+    the same noise, and the sentence is the only thing that differs between them.
+    """
+    base = g.get("seed_base") or 0
+    return [base + index if base else None for index in indices]
+
+
+def run(jobs: list[Job], backend, g: dict, out: Path, condition: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     fmt = g["save_format"]
     throttle = Throttle(g.get("requests_per_minute"))
@@ -376,33 +464,38 @@ def run(jobs: list[Job], backend, g: dict, out: Path) -> None:
             f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
 
     def do_job(job: Job) -> int:
-        result = backend.generate(job.prompt.text, len(job.indices))
+        # A seed only reaches the model when the request is for a single image: a model handed one
+        # seed for a batch picks the rest itself, so the number recorded would not be the one used.
+        seeds = seeds_for(g, job.indices)
+        result = backend.generate(job.prompt.text, len(job.indices),
+                                  seeds[0] if len(job.indices) == 1 else None)
         folder = out / "images" / job.prompt.iso3 / job.prompt.place
         folder.mkdir(parents=True, exist_ok=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
         records = []
         size = parse_size(g["size"])
-        for index, (data, revised_prompt) in zip(job.indices, result.images):
+        for (index, seed), (data, revised_prompt) in zip(zip(job.indices, seeds), result.images):
             name = f"{index:04d}.{EXTENSIONS[fmt]}"
             returned_size = save_image(data, folder / name, fmt, size)
             records.append({
                 "index": index, "file": name, "country": job.prompt.iso3, "place": job.prompt.place,
-                "prompt": job.prompt.text, "revised_prompt": revised_prompt, "model": g["model"],
+                "condition": condition, "prompt": job.prompt.text, "revised_prompt": revised_prompt,
+                "model": g["model"], "seed": seed if len(job.indices) == 1 else None,
                 "size": g["size"], "returned_size": returned_size, "quality": g.get("quality"),
                 "created_at": created,
             })
         append_jsonl(folder / "metadata.jsonl", records)
         append_jsonl(out / "predictions.jsonl", [{
             "at": created, "country": job.prompt.iso3, "place": job.prompt.place,
-            "indices": job.indices, "saved": len(records), **result.info,
+            "condition": condition, "indices": job.indices, "saved": len(records), **result.info,
         }])
         return len(records)
 
     def log_failure(job: Job, exc: Exception) -> None:
         append_jsonl(out / "failures.jsonl", [{
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "country": job.prompt.iso3, "place": job.prompt.place, "prompt": job.prompt.text,
-            "indices": job.indices, "error": type(exc).__name__, "status": getattr(exc, "status_code", None),
+            "country": job.prompt.iso3, "place": job.prompt.place, "condition": condition,
+            "prompt": job.prompt.text, "indices": job.indices, "error": type(exc).__name__, "status": getattr(exc, "status_code", None),
             "refusal": isinstance(exc, Refusal), "message": str(exc)[:500],
         }])
 
@@ -479,7 +572,10 @@ def main(argv: list[str] | None = None) -> None:
                                                  "already on disk (default: generation.budget_usd)")
     ap.add_argument("--prices", help="comma-separated prices per image to compare in the plan, "
                                      "e.g. 0.003,0.04,0.065")
-    ap.add_argument("--run", help="output folder under outputs/ (default: generation.run_name)")
+    ap.add_argument("--condition", help="which prompt template to use, from [prompts.conditions] "
+                                        "(default: prompts.condition)")
+    ap.add_argument("--run", help="output folder under outputs/ "
+                                  "(default: generation.run_name + '-' + the condition)")
     ap.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
 
@@ -487,24 +583,34 @@ def main(argv: list[str] | None = None) -> None:
     g = cfg["generation"]
     if g["save_format"] not in EXTENSIONS:
         raise SystemExit(f"generation.save_format must be one of: {', '.join(EXTENSIONS)}")
+    if (g.get("seed_base") or 0) and g["images_per_request"] != 1:
+        raise SystemExit(
+            f"generation.seed_base is set, so generation.images_per_request must be 1, not "
+            f"{g['images_per_request']}: a model given one seed for a batch chooses the rest of "
+            f"the batch's seeds itself, and metadata.jsonl would record a seed that does not "
+            f"reproduce the image. Set seed_base = 0 to batch requests instead.")
     try:
         parse_size(g["size"])
-        prompts = load_prompts(cfg, split_arg(args.countries, str.upper), split_arg(args.places, str.lower))
+        condition, template = template_for(cfg, args.condition)
+        prompts = load_prompts(cfg, split_arg(args.countries, str.upper),
+                               split_arg(args.places, str.lower), condition)
         prices = [float(p) for p in split_arg(args.prices, str.strip) or []]
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
+    if args.countries and any(p.iso3 == NO_COUNTRY for p in prompts):
+        print(f"Note: condition {condition!r} names no country, so --countries is ignored.")
 
     cap = args.n or g["images_per_prompt"]
     budget = (g.get("budget_usd") or 0) if args.budget is None else args.budget
     price = g.get("price_per_image_usd") or 0
     if budget and not price:
         raise SystemExit("A budget needs generation.price_per_image_usd: what one image costs.")
-    out = run_dir(cfg, args.run)
+    out = run_dir(cfg, args.run or f"{g['run_name']}-{condition.replace('_', '-')}")
     have = [len(existing_indices(out / "images" / p.iso3 / p.place)) for p in prompts]
     n_per_prompt = images_within_budget(have, cap, price, budget) if budget else cap
     jobs = plan_jobs(prompts, out / "images", n_per_prompt, g["images_per_request"])
 
-    print_plan(g, prompts, jobs, n_per_prompt, out, budget, have)
+    print_plan(g, prompts, jobs, n_per_prompt, out, budget, have, condition, template)
     if prices:
         print("\n  The same run at other prices:")
         for other in prices:
@@ -522,6 +628,7 @@ def main(argv: list[str] | None = None) -> None:
     if not g["model"]:
         raise SystemExit("\nSet generation.model in config.toml first, e.g. black-forest-labs/flux-schnell.")
     backend = make_backend(g)
+    backend.preflight()
     if not args.yes:
         try:
             answer = input("\nStart generating? [y/N] ")
@@ -530,7 +637,7 @@ def main(argv: list[str] | None = None) -> None:
         if answer.strip().lower() != "y":
             print("Cancelled. (Pass --yes to skip this question.)")
             return
-    run(jobs, backend, g, out)
+    run(jobs, backend, g, out, condition)
 
 
 if __name__ == "__main__":
