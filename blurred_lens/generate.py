@@ -65,6 +65,12 @@ POLL_INTERVAL = 2.0          # seconds between polls while a prediction is still
 POLL_TIMEOUT = 900           # give up on a prediction that never finishes
 HTTP_RETRIES = 5             # retries for rate limits, timeouts and server errors
 REFUSAL_WORDS = ("nsfw", "safety", "flagged", "sensitive content", "content policy", "moderation")
+# Replicate's official models (black-forest-labs/flux-schnell among them) are called by name rather
+# than by version, and their predictions report this instead of a version id. It is not a version to
+# compare against, so a run pinned to a version has to ask the model endpoint instead -- see
+# ReplicateBackend.check_version.
+HIDDEN_VERSION = "hidden"
+VERSION_RECHECK_SECONDS = 60  # how often a run may re-read a hidden model's version (a free call)
 
 
 class FatalError(RuntimeError):
@@ -240,9 +246,14 @@ class ReplicateBackend:
         self.count_param = g.get("count_param") or "num_outputs"
         self.seed_param = g.get("seed_param") or ""
         self.input = dict(g.get("input") or {})
+        # The version this run is held to: the configured pin, or else the first one observed.
         self.version = (g.get("model_version") or "").strip()
-        self.seen_version: str | None = None
         self.version_lock = threading.Lock()
+        self.next_recheck = 0.0
+
+    def current_version(self) -> str | None:
+        """The version Replicate would run right now. Reading a model is free: no prediction."""
+        return (self.request(f"{REPLICATE_API}/models/{self.model}").get("latest_version") or {}).get("id")
 
     def preflight(self) -> None:
         """Check the pinned version before anything is spent, not after.
@@ -252,39 +263,56 @@ class ReplicateBackend:
         to, say so now rather than after the first few hundred images. check_version below is the
         other half, for a model that changes while the run is in flight.
         """
-        if not self.version:
-            return
-        current = (self.request(f"{REPLICATE_API}/models/{self.model}").get("latest_version") or {}).get("id")
-        if current and current != self.version:
+        current = self.current_version()
+        if self.version and current and current != self.version:
             raise SystemExit(
                 f"\ngeneration.model_version pins {self.version[:12]}…, but Replicate now serves "
                 f"{current[:12]}… for {self.model}.\nThe model was updated, and these images would "
                 f"not match any already measured under the pin. Either keep the old run as it is "
                 f"and start a new generation.run_name with model_version = \"{current}\", or clear "
                 f"the pin to accept whatever Replicate serves.")
+        if not self.version:
+            # Unpinned: hold the run to whatever is served now, so it is still one model throughout.
+            self.version = current or ""
 
-    def check_version(self, version: str | None) -> None:
-        """Stop the run if Replicate answered with a model version other than this run's.
-
-        Replicate can update a model under its own name, which would change what the numbers
-        measure without changing anything visible on disk. generation.model_version pins the
-        version this run is allowed to use; with no pin, the first version seen becomes the pin for
-        the rest of the run. Either way a change is fatal rather than a warning, because a run that
-        half predates an update is not one measurement.
-        """
-        if not version:
-            return
+    def hold_to(self, version: str | None) -> str | None:
+        """The version this run is held to: the pin, else the first one actually seen."""
         with self.version_lock:
-            expected = self.version or self.seen_version
-            if not expected:
-                self.seen_version = version
-                return
-        if version != expected:
+            if not self.version and version:
+                self.version = version
+            return self.version or None
+
+    def refuse_other_version(self, version: str | None) -> None:
+        """Stop the run if `version` is not the one this run is held to."""
+        expected = self.hold_to(version)
+        if version and expected and version != expected:
             raise FatalError(
-                f"Replicate answered with model version {version}, not {expected}. The model was "
+                f"Replicate is serving model version {version}, not {expected}. The model was "
                 f"updated, so these images would not be the ones already on disk. Start a new "
                 f"generation.run_name for the new version, or set generation.model_version to the "
                 f"one you mean to measure.")
+
+    def check_version(self, version: str | None) -> None:
+        """Stop the run if the model changed under it, whether or not it reports its version.
+
+        An update would change what the numbers measure without changing anything visible on disk,
+        so a change is fatal rather than a warning: a run that half predates an update is not one
+        measurement. Community models name their version in every prediction, which is free to
+        check. Official models answer HIDDEN_VERSION instead, so the question goes to the model
+        endpoint -- also free, but a whole extra request, so at most once every
+        VERSION_RECHECK_SECONDS rather than once per image.
+        """
+        if version and version != HIDDEN_VERSION:
+            self.refuse_other_version(version)
+            return
+        if not self.version:
+            return  # nothing to hold it to: no pin, and the metadata read at preflight failed
+        with self.version_lock:
+            now = time.monotonic()
+            if now < self.next_recheck:
+                return
+            self.next_recheck = now + VERSION_RECHECK_SECONDS
+        self.refuse_other_version(self.current_version())
 
     def generate(self, prompt: str, n: int, seed: int | None = None) -> Generated:
         body = {"input": {"prompt": prompt, **self.input, self.count_param: n}}
@@ -314,6 +342,7 @@ class ReplicateBackend:
                 "provider": "replicate",
                 "model": prediction.get("model") or self.model,
                 "version": prediction.get("version"),
+                "held_to_version": self.version or None,
                 "prediction_id": prediction.get("id"),
                 "predict_time": (prediction.get("metrics") or {}).get("predict_time"),
                 "prediction_created_at": prediction.get("created_at"),

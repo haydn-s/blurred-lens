@@ -243,3 +243,54 @@ def test_a_model_already_updated_is_caught_before_anything_is_spent(monkeypatch)
 
     backend.request = lambda url, body=None: {"latest_version": {"id": "c846a699"}}
     backend.preflight()  # unchanged: nothing to say
+
+
+def hidden_version_backend(monkeypatch, serves, counter=None):
+    """An official-model backend: predictions report "hidden", the model endpoint reports `serves`."""
+    backend = replicate_backend(monkeypatch)
+    backend.version = "c846a699"
+    backend.download = lambda url: b"image"
+
+    def request(url, body=None):
+        if url.endswith("/predictions"):
+            return {"status": "succeeded", "output": ["https://out/1.jpg"],
+                    "version": generate.HIDDEN_VERSION}
+        if counter is not None:
+            counter.append(url)
+        return {"latest_version": {"id": serves}}
+
+    backend.request = request
+    return backend
+
+
+def test_an_official_models_hidden_version_is_not_mistaken_for_a_change(monkeypatch):
+    """Official models are called by name and report "hidden"; that is not a different model."""
+    backend = hidden_version_backend(monkeypatch, serves="c846a699")
+    assert backend.generate("a city in Nigeria", 1).images == [(b"image", None)]
+
+
+def test_a_hidden_version_is_checked_against_the_model_endpoint_instead(monkeypatch):
+    """The pin still has to mean something when the prediction will not name its version."""
+    backend = hidden_version_backend(monkeypatch, serves="deadbeef")
+    with pytest.raises(generate.FatalError, match="deadbeef"):
+        backend.generate("a city in Nigeria", 1)
+
+
+def test_the_hidden_version_recheck_costs_one_request_a_minute_not_one_an_image(monkeypatch):
+    reads = []
+    backend = hidden_version_backend(monkeypatch, serves="c846a699", counter=reads)
+
+    for _ in range(5):
+        backend.generate("a city in Nigeria", 1)
+
+    assert len(reads) == 1, "the model endpoint should be read once, not once per image"
+
+
+def test_an_unpinned_run_is_held_to_whatever_is_served_when_it_starts(monkeypatch):
+    backend = replicate_backend(monkeypatch)
+    backend.version = ""
+    backend.request = lambda url, body=None: {"latest_version": {"id": "c846a699"}}
+
+    backend.preflight()
+
+    assert backend.version == "c846a699"
