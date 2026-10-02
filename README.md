@@ -30,9 +30,13 @@ config.toml ─────────┘                               │
 |---|---|---|
 | 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. One condition at a time, resumable, breadth-first, seeded, logs metadata. |
 | 2. Measure | `python -m blurred_lens.analyze` | Measures color, tone and haze on every image; summarizes each prompt. |
-| 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, and tests the ranking against region and income. |
+| 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, against the average country and the no-country baseline, and tests the ranking against region and income with latitude held constant. |
 | 4. Export | `python -m blurred_lens.export_site` | Copies sample thumbnails, writes `web/data/manifest.json` (every prompt, measured or not). |
 | 5. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
+
+`python -m blurred_lens.sizing --run <pilot>` sits beside these rather than in the chain: it reads
+what a pilot measured and says how many images per prompt the comparison needs. See
+[How many images are enough?](#scale-and-budget)
 
 ## Conditions
 
@@ -61,6 +65,39 @@ the model's own default for a city, a village, a house, so each country can be r
 from that default. It has no country dimension: one prompt per place, filed under `_none`, which is
 not an ISO code, so the baseline never enters the country rankings or the globe. `report` has nothing
 to rank in a baseline run and says so; its numbers are in `analysis/_none/<place>.json`.
+
+## Two yardsticks, and the confound
+
+`report` answers the same question twice over, because one answer on its own is misleading.
+
+**Against the average country, and against the model's own default.** A country's z-score says how
+far it sits from the average country, which says who is warmest but not whether the model is doing
+anything unusual to anyone: if every country were graded identically warm, the z-scores would still
+spread out. Pass `--baseline` a run generated with a no-country condition and each country is also
+reported as a deviation from the model's own picture of the same place with no country named — a zero
+that does not move when the set of countries changes. Match the light: report a `noon` run against
+`phase2-baseline-noon`, a `free` one against `phase2-baseline`.
+
+```bash
+python -m blurred_lens.report --run phase2-noon --baseline phase2-baseline-noon
+```
+
+**With latitude held constant.** Near the equator the light really is harsher and warmer, and across
+the world's countries income and latitude are badly confounded (see [Data](#data)). So every group
+test is run twice: on the ranking, and on what is left of it after a straight line in `|latitude|`
+has been taken out. The printed report says how much of the spread latitude alone accounts for, then
+repeats each group table net of it:
+
+```
+Latitude, the rival explanation (10 countries):
+  index = -0.0334 × |latitude| +0.892; distance from the equator accounts for 44% of the spread
+```
+
+A group that keeps its gap needs more than latitude to explain it; one that loses it was tracking
+distance from the equator all along. In the pilot, Europe's `p` went from 0.022 to 0.328 under the
+control — which is the control doing its job, and a reminder to read the second table rather than the
+first. It is a straight line, not a climate model: it cannot tell a stereotype from a climate, only
+whether the pattern survives the most obvious confound.
 
 ## Image backend: Replicate
 
@@ -152,18 +189,26 @@ python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04
 - **Too small a budget is refused:** if it buys fewer than `min_images_per_prompt` (default 20) per
   prompt, `generate` says what that minimum would cost. Narrow the run (`--places`), pick a cheaper
   model, or lower the minimum.
-- **How many images are enough?** Enough that the noise on one country's mean is small against the
-  spread *between* countries — that ratio, not the images themselves, is what the comparison rests on.
-  `report` prints both numbers for every place:
+- **How many images are enough?** Run a pilot and ask `sizing`:
 
-  ```
-  How much of this is noise?
-    city       countries differ by sd 0.412; a single country's mean is measured to ±0.137
+  ```bash
+  python -m blurred_lens.generate --countries NOR,SGP,NGA,ETH,AFG,PRK --n 50
+  python -m blurred_lens.analyze --run phase2-free --min-images 50
+  python -m blurred_lens.sizing  --run phase2-free --target 0.95
   ```
 
-  A country's mean is measured to `sd/√n`, so quadrupling the images halves that `±`. Run a pilot,
-  read those two numbers, and pick the smallest *n* that puts the error well inside the spread —
-  then spend what is left on more countries, which are the unit of the statistical test.
+  What it protects is the *contrast between groups of countries*, not any one country's mean. Noise
+  on each country's mean adds to the real spread between countries, so an effect measured through it
+  comes out attenuated by `sd_true/√(sd_true² + sem²)` — and that is what `sizing` prints, together
+  with the *n* at which the attenuation stops mattering. Sizing instead for "tell any two countries
+  apart" asks for several times more images than the income question needs, which is the wrong thing
+  to spend a budget on.
+
+  Two corrections it applies, both pushing *n* up: the spread a pilot prints is inflated by the
+  pilot's own noise (`sd_obs² = sd_true² + sem²`), and a pilot picked for contrast spreads wider than
+  the set it stands in for, so its spread is discounted by the ratio of `sd(|latitude|)` over the
+  full scope to `sd(|latitude|)` over the measured countries. A run covering the whole scope is not
+  discounted at all.
 
 ## Setup
 
@@ -386,11 +431,12 @@ only thing that changed.
 - [x] Image backend (Replicate), budgeting, and measurement of every image
 - [x] Generation built for the question: a light control, a no-country baseline, a 48-country list
       that separates income from latitude, per-image seeds and a pinned model version
-- [ ] Pilot: a few contrasting countries at ~50 images, then set the sample size from the noise line
+- [x] Pilot: 10 contrasting countries × 3 places × 50 images under all four conditions ($9.90)
 - [ ] Run the phase-2 matrix (`free`, `noon`, and both baselines) at the size the pilot picks
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
+- [x] Report countries as deviations from the baseline run, and control for latitude, in `report`
+- [x] `sizing`: pick images per prompt from a pilot's measured noise
 - [ ] Tint the globe by the headline measurement once there is real data to scale it against
-- [ ] Report countries as deviations from the baseline run, and control for latitude, in `report`
 - [ ] Write up: which countries the model grades warmest, whether that survives the light control,
       and whether it tracks income once latitude is held constant
 - [ ] Widen beyond color: what the model puts in the frame, not only how it lights it

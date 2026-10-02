@@ -147,6 +147,12 @@ metric = "cast_b"             # yellow-blue cast on the picture as a whole; high
 income_file = "data/income_groups.json"
 permutations = 10000          # label shuffles behind each group comparison's p-value
 
+# The run holding the no-country baseline for the run being reported, so each country is read as a
+# deviation from the model's own default picture of a place and not only from the average country.
+# Match the light: report a `noon` run against `phase2-baseline-noon`, a free one against
+# `phase2-baseline`. "" = no baseline column; --baseline overrides.
+baseline_run = ""
+
 [paths]
 outputs_dir = "outputs"
 site_data_dir = "web/data"
