@@ -101,11 +101,17 @@ returns is still saved at exactly `generation.size`, so images line up across mo
   would not be one that reproduces the image. `generate` refuses the combination rather than logging
   a seed it cannot stand behind.
 - **A pinned model version.** `generation.model_version` is the version every image of a run must come
-  from. Replicate reports the version that answered each prediction, and a mismatch stops the run: a
-  model updated half way through would change what the numbers mean without changing anything visible
-  on disk. Leave it empty and the first version seen becomes the pin for the rest of that run. Read
-  the current one at `https://replicate.com/<owner>/<model>/api`, or
-  `GET /v1/models/<owner>/<model>`.
+  from, and a mismatch stops the run: a model updated half way through would change what the numbers
+  mean without changing anything visible on disk. Leave it empty and whatever is served when the run
+  starts becomes the pin for the rest of it. Read the current one at
+  `https://replicate.com/<owner>/<model>/api`, or `GET /v1/models/<owner>/<model>`.
+
+  How it is checked depends on the model. A community model names its version in every prediction, so
+  the check is free. **Replicate's official models are called by name, not by version, and report
+  `"version": "hidden"` instead** — so a run pinned to a version asks the model endpoint instead, once
+  before anything is spent and then at most once a minute while the run is in flight. Both reads are
+  free; neither creates a prediction. `predictions.jsonl` records what the prediction said *and* the
+  version the run was held to, so provenance is answerable either way.
 
 Setting `provider = "openai"` uses any OpenAI-compatible `/images/generations` endpoint instead
 (`base_url`, `api_key_env`, `model`, `quality`).
