@@ -160,14 +160,18 @@ and `generate` splits it evenly: every prompt gets the same number of images, as
 buys, so every country and place is measured from the same sample size. Generating the same scope
 under two conditions costs two budgets.
 
-Phase 2 is 48 countries × 3 places = **144 prompts** per country condition, plus 3 for each baseline
+Phase 2 is 60 countries × 6 places = **360 prompts** per country condition, plus 6 for each baseline
 (the baseline has no country dimension). At `$0.003`/image:
 
 | Images per prompt | `free` | `noon` | both baselines | total |
 |---:|---:|---:|---:|---:|
-| 50 | $21.60 | $21.60 | $0.90 | **$44.10** |
-| 100 | $43.20 | $43.20 | $1.80 | **$88.20** |
-| 200 | $86.40 | $86.40 | $3.60 | **$176.40** |
+| 42 | $45.36 | $45.36 | $1.51 | **$92.23** |
+| 84 | $90.72 | $90.72 | $3.02 | **$184.46** |
+| 126 | $136.08 | $136.08 | $4.54 | **$276.70** |
+
+Phase 2 runs at **84**, which the pilot's noise puts at 97% of a real group difference surviving
+under `free` and 99% under `noon`. Images past that buy almost nothing, because a country's index
+already averages six places — which is why the budget went to countries and places instead.
 
 The full scope is 197 countries × 8 place types = **1,576 prompts**. Images per prompt for all 1,576,
 for one condition:
@@ -203,6 +207,13 @@ python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04
   with the *n* at which the attenuation stops mattering. Sizing instead for "tell any two countries
   apart" asks for several times more images than the income question needs, which is the wrong thing
   to spend a budget on.
+
+  **Read the index line, not the per-place table.** `report` ranks by an index averaging a country's
+  z-score over every place, so the noise on it falls as `√(places × images)`: six places at 84 images
+  is exactly as precise as three at 168, and both beat any single place by a wide margin. On the
+  pilot, one place alone asked for 627 images per prompt; the index asked for 143 at three places,
+  and about half that at six. More places are as good as more images **and** widen the claim, so they
+  are the better buy.
 
   Two corrections it applies, both pushing *n* up: the spread a pilot prints is inflated by the
   pilot's own noise (`sd_obs² = sd_true² + sem²`), and a pilot picked for contrast spreads wider than
@@ -289,6 +300,7 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 | `iso_a2`, `iso_a3`, `iso_num` | `US`, `USA`, `840` | folder names (`iso_a3`), map matching (`iso_num`) |
 | `region`, `subregion` | `Americas`, `Northern America` | grouping and analysis |
 | `latitude` | `38.0` | controlling for how far from the equator a country sits |
+| `population` | `340110988` | a floor on the run's scope, and a proxy for how much the model has seen |
 | `un_status` | `member`, `observer`, `non-member` | filtering |
 
 `prompt_name` exists because grammar and ambiguity change what the model draws:
@@ -308,19 +320,31 @@ latitude is the rival explanation for everything this project measures: near the
 really is harsher and warmer. One degree of precision is plenty — what matters is *distance from the
 equator*, as a covariate the analysis can hold constant.
 
-**Which countries a run covers** is `prompts.countries` in `config.toml`, and for phase 2 that list is
-built for the income question rather than hand-picked. Across the 195 countries with a World Bank
-income group the rich ones sit far from the equator and the poor ones near it — mean |latitude| 37°
-for high income against 14° for low — so "warmer because poorer" and "warmer because nearer the
-equator" would be the same sentence. The phase-2 list is 48 countries, 12 per income group, chosen to
-break that tie: hot high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago,
-Barbados, the UAE, Saudi Arabia) against cool or highland low- and lower-middle-income ones (North
-Korea, Syria, Afghanistan, Mongolia, Kyrgyzstan, Uzbekistan, Nepal, Bolivia, Lesotho, the Ethiopian
-and Rwandan highlands). That leaves the groups nearly level — mean |latitude| 25°, 23°, 23°, 19° from
-high income to low, a 6° spread where the world's is 23° — and puts all four income groups in every
-latitude band, so latitude can be controlled for instead of merely hoped about. `tests/test_data.py`
-holds the list to that standard, so editing it fails loudly rather than quietly re-introducing the
-confound.
+**Which countries a run covers** is `prompts.countries` in `config.toml`: 60 countries, 15 per World
+Bank income group, chosen under three constraints rather than by hand.
+
+- **Income must not stand in for latitude.** Across the 195 countries with an income group the rich
+  ones sit far from the equator and the poor ones near it — mean |latitude| 37° against 14° — so
+  "warmer because poorer" and "warmer because nearer the equator" would be one sentence. Pairing hot
+  high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago, the Gulf states) against
+  cool or highland poor ones (North Korea, Syria, Afghanistan, Uzbekistan, the Ethiopian and Rwandan
+  highlands) closes the gap between richest and poorest groups to **9.4°**, and puts all four income
+  groups on both sides of 20° so `report` can hold latitude constant by interpolating rather than
+  extrapolating. Spearman(income rank, |latitude|) is **0.24** here against **0.46** for the world.
+- **The model has to have seen the country.** Every country here has at least a million people.
+  Without that floor the arithmetic prefers tropical micro-states — Nauru, Palau, Tuvalu — which
+  balance latitude perfectly and carry none of the stereotypes this project is about.
+- **A reader has to find the countries they came for.** The United States, Germany, Japan, Norway,
+  Brazil, Mexico, China, India, Nigeria, Egypt, Ethiopia, Afghanistan and North Korea are fixed in
+  the list; the rest were chosen around them.
+
+**Why 60 and not more:** countries are the unit of the statistical test, so power rises with them,
+but the supply of warm rich and cool poor countries runs out. At 72 countries the income–latitude
+correlation climbs to 0.31 and at 84 to 0.40 — close to the world's own 0.46, buying power by giving
+back the thing the design exists to establish.
+
+`tests/test_data.py` holds the list to all three standards, so editing it fails loudly rather than
+quietly re-introducing the confound.
 
 **`data/places.json`**: the `{place}` and `{view}` slots. Each entry has an `id` (folder name), a
 `label` (display), a `phrase` with its article (*a city*, *a rural area*), and a `view` that fixes the
@@ -432,7 +456,7 @@ only thing that changed.
 - [x] Generation built for the question: a light control, a no-country baseline, a 48-country list
       that separates income from latitude, per-image seeds and a pinned model version
 - [x] Pilot: 10 contrasting countries × 3 places × 50 images under all four conditions ($9.90)
-- [ ] Run the phase-2 matrix (`free`, `noon`, and both baselines) at the size the pilot picks
+- [ ] Run the phase-2 matrix (`free`, `noon`, both baselines): 60 countries × 6 places × 84 images
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
 - [x] Report countries as deviations from the baseline run, and control for latitude, in `report`
 - [x] `sizing`: pick images per prompt from a pilot's measured noise

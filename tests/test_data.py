@@ -118,3 +118,23 @@ def test_the_run_scope_breaks_the_tie_between_income_and_latitude():
     for low, high in ((0, 20), (20, 90)):
         band = [iso3 for iso3 in CFG["prompts"]["countries"] if low <= latitude[iso3] < high]
         assert len({income["countries"][iso3] for iso3 in band}) == 4, (low, high, band)
+
+
+def test_every_country_has_a_population():
+    """A proxy for how much the model has seen of a country, and the floor on the run's scope."""
+    for c in COUNTRIES:
+        assert isinstance(c["population"], int) and c["population"] > 0, c
+
+
+def test_the_run_scope_leaves_out_countries_the_model_can_barely_have_seen():
+    """Micro-states balance latitude beautifully and carry none of the stereotypes in question."""
+    population = {c["iso_a3"]: c["population"] for c in COUNTRIES}
+    too_small = {iso3 for iso3 in CFG["prompts"]["countries"] if population[iso3] < 1_000_000}
+    assert not too_small, too_small
+
+
+def test_the_run_scope_keeps_the_countries_a_reader_will_look_for():
+    """A study of how AI pictures countries that omits the obvious ones answers nobody."""
+    scope = set(CFG["prompts"]["countries"])
+    for iso3 in ("USA", "DEU", "JPN", "BRA", "MEX", "CHN", "IND", "NGA", "EGY", "ETH", "AFG"):
+        assert iso3 in scope, iso3

@@ -13,29 +13,48 @@ condition = "free"
 # The scope of a run: which entries of those files it uses. Empty lists mean all of them, and
 # --countries / --places override these. A baseline condition ignores the country list.
 #
-# Phase 2: 48 countries, 12 in each World Bank income group (data/income_groups.json), chosen so the
-# income question can be asked without latitude answering it. Across all 195 countries with an income
-# group, the rich ones sit far from the equator and the poor ones near it (mean |latitude| 37° for
-# high income against 14° for low income), so "warmer because poorer" would be impossible to tell
-# apart from "warmer because closer to the equator". This set deliberately breaks that tie: hot
-# high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago, Barbados, the UAE, Saudi
-# Arabia) against cool or highland low- and lower-middle-income ones (North Korea, Syria, Afghanistan,
-# Mongolia, Kyrgyzstan, Uzbekistan, Nepal, Bolivia, Lesotho, the Ethiopian and Rwandan highlands). It
-# leaves the income groups nearly level on latitude -- mean |latitude| 25°, 23°, 23°, 19° from high to
-# low, a 6° spread where the world's is 23° -- and puts all four income groups in every latitude band,
-# so latitude can be controlled for rather than merely hoped about. Countries are the unit of the
-# statistical test, so 48 of them with fewer images each buys more than 13 with more.
+# Phase 2: 60 countries, 15 in each World Bank income group (data/income_groups.json), sized and
+# chosen from the pilot's measured noise rather than by hand. Three constraints shaped the list.
+#
+#   Income must not stand in for latitude. Across the 195 countries with an income group the rich
+#   ones sit far from the equator and the poor ones near it -- mean |latitude| 37° against 14° -- so
+#   "warmer because poorer" and "warmer because nearer the equator" would be one sentence. Pairing
+#   hot high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago, the Gulf states)
+#   against cool or highland poor ones (North Korea, Syria, Afghanistan, Uzbekistan, the Ethiopian
+#   and Rwandan highlands) closes the gap between the richest and poorest groups to 9.4°, and puts
+#   all four income groups on both sides of 20°, so `report` can hold latitude constant by
+#   interpolating rather than extrapolating. Spearman(income rank, |latitude|) is 0.24 here against
+#   0.46 for the world.
+#
+#   Countries have to be ones the model has seen. Every country here has at least a million people.
+#   Without that floor the arithmetic prefers tropical micro-states -- Nauru, Palau, Tuvalu -- which
+#   balance latitude perfectly and carry none of the stereotypes this project is about.
+#
+#   A reader has to find the countries they came to look for. The United States, Germany, Japan,
+#   Norway, Brazil, Mexico, China, India, Nigeria, Egypt, Ethiopia, Afghanistan and North Korea are
+#   fixed in the list; the rest were chosen around them to balance latitude.
+#
+# Why 60 and not more: countries are the unit of the statistical test, so power rises with them, but
+# the supply of warm rich and cool poor countries runs out. At 72 countries the income-latitude
+# correlation climbs to 0.31 and at 84 to 0.40, close to the world's own 0.46 -- buying power by
+# giving back the thing the design exists to establish. 60 holds the confound at the level of the
+# hand-picked phase-1 list while raising the power to detect a large income effect from 66% to 76%.
 countries = [
   # High income
-  "SGP", "PAN", "CRI", "TTO", "BRB", "ARE", "SAU", "AUS", "JPN", "USA", "DEU", "NOR",
+  "AUS", "BHR", "CRI", "DEU", "JPN", "KWT", "NOR", "OMN", "PAN", "QAT", "SAU", "SGP", "TTO", "ARE", "USA",
   # Upper middle income
-  "IDN", "ECU", "PER", "BRA", "THA", "MEX", "DZA", "ZAF", "IRN", "CHN", "TUR", "MNG",
+  "DZA", "BRA", "CHN", "COL", "CUB", "ECU", "IRN", "KAZ", "MEX", "MKD", "PER", "PHL", "ZAF", "LKA", "TUR",
   # Lower middle income
-  "KEN", "TZA", "NGA", "BOL", "ZWE", "IND", "EGY", "NPL", "LSO", "MAR", "KGZ", "UZB",
+  "BGD", "CIV", "DJI", "EGY", "GHA", "IND", "KEN", "MAR", "NAM", "NGA", "PAK", "PNG", "TLS", "TUN", "UZB",
   # Low income
-  "UGA", "RWA", "ETH", "TCD", "YEM", "MLI", "NER", "MOZ", "MDG", "AFG", "SYR", "PRK",
+  "AFG", "BDI", "TCD", "ERI", "ETH", "MDG", "MLI", "MOZ", "NER", "PRK", "RWA", "SOM", "SYR", "UGA", "YEM",
 ]
-places = ["city", "village", "house"]
+# Six kinds of place, spanning dense urban, small urban, rural settlement, a single building, open
+# landscape and commerce. Places cost nothing in precision: a country's index is the average of its
+# per-place scores, so the noise on it falls as sqrt(places x images) -- six places at 84 images each
+# is exactly as precise as three at 168, and says the grade holds across six kinds of scene instead
+# of three. `suburb` and `farm` are left out as near-duplicates of `village` and `rural`.
+places = ["city", "town", "village", "house", "rural", "market"]
 
 # A condition is a prompt template, and it is the one thing a run is allowed to vary. Each condition
 # writes to its own run folder (outputs/<run_name>-<condition>/), so two sentences can never end up in
@@ -67,14 +86,21 @@ baseline_noon = "A photograph of {place}, {view}, at noon under a clear sky with
 # ...), so a template change always lands in its own folder. Start a new name whenever you change the
 # model or the size, so images from different setups are never compared.
 run_name = "phase2"
-images_per_prompt = 500       # target per prompt; with a budget, the most the budget may buy
+# 84 per prompt, from the pilot's measured noise rather than a guess: at 6 places that leaves a
+# country's index measured to about a 25th of the spread between countries, so 97% of a real group
+# difference survives the measurement under the free prompt and 99% under the light control. More
+# images buy almost nothing from there -- the index already averages six places -- which is why the
+# budget went to countries and places instead. `python -m blurred_lens.sizing --run phase2-noon`
+# re-checks this against whatever is on disk.
+images_per_prompt = 84
 
 # Budget: the most this run may cost in total (USD), counting images already on disk. It is split
 # evenly: every prompt gets the same number of images, so every country and place is measured from the
 # same sample size and the comparison stays fair. Raise it later and a re-run tops every prompt up.
 # 0 = no budget (generate images_per_prompt). Needs price_per_image_usd. The budget is per run, and
 # each condition is a run, so four conditions cost four budgets.
-budget_usd = 25.0             # the pilot; raise it once the pilot says how many images a prompt needs
+budget_usd = 95.0             # per run, and a condition is a run: ~$91 each for free and noon,
+                              # ~$1.51 for each baseline, ~$185 for the four together
 min_images_per_prompt = 20    # a budget that buys fewer than this per prompt is refused
 
 # Replicate (https://replicate.com). The API token decides which account pays, so use a token

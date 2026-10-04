@@ -15,6 +15,13 @@ through it is attenuated by
 which is what this prints. Sizing instead for "tell any two countries apart" asks for a far larger
 sample than the group question needs, so it is the wrong target to spend a budget against.
 
+**Read the index line, not the per-place table.** `report` ranks countries by an index that averages
+a country's z-score over every place, so the noise on it falls as sqrt(places x images): six places
+at 84 images each is exactly as precise as three at 168, and both are far more precise than any one
+place on its own. Sizing from a single place therefore asks for several times more images than the
+comparison needs -- the per-place table is here for ranking countries within one kind of place, and
+the index line is the one a budget should be spent against.
+
 Two corrections, both of which push the answer up rather than down:
 
 1. **The observed spread between countries is inflated by the noise itself** -- what a pilot prints
@@ -74,8 +81,50 @@ def shrink_factor(measured: set[str], cfg: dict) -> tuple[float, int, int]:
     return min(1.0, spread_full / spread_here), len(here), len(full)
 
 
+def index_level(summaries: dict, metric: str, factor: float, target: float) -> dict | None:
+    """The same question asked of the index `report` actually ranks by: places averaged.
+
+    A country's index is the mean of its per-place z-scores, so independent per-place noise averages
+    down by sqrt(places) while the country's own grade -- which the pilot shows is much the same
+    whatever the place -- does not. The index spread is about 1 by construction, because z-scores are
+    standardised by how much countries differ; what the pilot's narrowness inflates is the *noise*,
+    since a narrower real spread makes the same sem a bigger share of it. So the discount lands on
+    the noise here rather than on the spread.
+    """
+    places = sorted({p for _, p in summaries})
+    rows = {}
+    for place in places:
+        at = {iso3: data["summary"][metric] for (iso3, p), data in summaries.items()
+              if p == place and iso3 != NO_COUNTRY and metric in data.get("summary", {})}
+        if len(at) >= 3:
+            spread = st.stdev([v["mean"] for v in at.values()])
+            if spread > 0:
+                rows[place] = (at, spread, st.mean([v["mean"] for v in at.values()]))
+    if not rows:
+        return None
+    shared = sorted(set.intersection(*(set(at) for at, _, _ in rows.values())))
+    if len(shared) < 3:
+        return None
+    index, noise = {}, {}
+    for iso3 in shared:
+        zs = [(at[iso3]["mean"] - mean) / spread for at, spread, mean in rows.values()]
+        zn = [at[iso3]["sem"] / spread for at, spread, _ in rows.values()]
+        index[iso3] = st.mean(zs)
+        noise[iso3] = (sum(v * v for v in zn) ** 0.5) / len(zn)
+    n_now = int(st.median([at[iso3][ "n"] for at, _, _ in rows.values() for iso3 in [shared[0]]]))
+    observed = st.stdev(list(index.values()))
+    e = st.median(list(noise.values())) / factor      # a narrower real spread makes the same sem bigger
+    true = max(observed ** 2 - e ** 2, 0.0) ** 0.5
+    return {
+        "places": len(rows), "countries": len(shared), "n": n_now,
+        "index_noise": e, "observed_sd": observed, "true_sd": true,
+        "attenuation_now": attenuation(true, e),
+        "images_needed": images_for(true, e, n_now, target),
+    }
+
+
 def size_run(cfg: dict, run: str, metric: str, target: float, group_size: int) -> dict:
-    """Per place: the spread, the noise, what survives it now, and what sample size would fix it."""
+    """Per place and for the index: the spread, the noise, and what sample size would fix it."""
     summaries = load_summaries(run_dir(cfg, run))
     measured = {iso3 for iso3, _ in summaries if iso3 != NO_COUNTRY}
     factor, here, full = shrink_factor(measured, cfg)
@@ -99,7 +148,8 @@ def size_run(cfg: dict, run: str, metric: str, target: float, group_size: int) -
                                    if true * factor > 0 else None,
         }
     return {"run": run, "metric": metric, "target": target, "shrink": factor,
-            "countries_measured": here, "countries_in_scope": full, "places": places}
+            "countries_measured": here, "countries_in_scope": full, "places": places,
+            "index": index_level(summaries, metric, factor, target)}
 
 
 def print_sizing(sized: dict) -> None:
@@ -119,10 +169,24 @@ def print_sizing(sized: dict) -> None:
         print(f"  {place:<10} {row['n']:>5} {row['sem']:>11.3f} {row['discounted_sd']:>8.3f} "
               f"{row['attenuation_now'] * 100:>8.0f}% {('-' if need is None else need):>8}")
     worst = max((r["images_needed"] or 0) for r in sized["places"].values())
-    print(f"\n  -> {worst} images per prompt, set by the place that needs most.")
-    print("     'survives' is sd_true/sqrt(sd_true^2+sem^2): the share of a real group difference\n"
-          "     left after measurement noise dilutes it. 'spread' is already noise-corrected and\n"
-          "     discounted. Sizing to tell two individual countries apart would ask for far more.")
+    print(f"\n  Within any one place alone, {worst} images per prompt -- but that is not what the\n"
+          f"  comparison rests on:")
+
+    idx = sized.get("index")
+    if idx:
+        print(f"\n  THE INDEX (what `report` ranks by: {idx['places']} places averaged, "
+              f"{idx['countries']} countries)")
+        print(f"    noise on one country's index   {idx['index_noise']:.3f}"
+              f"   <- {idx['places']} places cut this by ~sqrt({idx['places']})")
+        print(f"    spread between countries       {idx['true_sd']:.3f}  (noise-corrected)")
+        print(f"    survives at n={idx['n']:<4}            {idx['attenuation_now'] * 100:.0f}%")
+        print(f"    -> {idx['images_needed']} images per prompt for {sized['target'] * 100:.0f}%, "
+              f"at {idx['places']} places")
+        print(f"\n  Spend a budget against this line. Noise on the index falls as "
+              f"sqrt(places x images), so\n  more places are exactly as good as more images and buy "
+              f"breadth of claim as well.")
+    print("\n  'survives' is sd_true/sqrt(sd_true^2+sem^2): the share of a real group difference left\n"
+          "  after measurement noise dilutes it.")
 
 
 def main(argv: list[str] | None = None) -> None:

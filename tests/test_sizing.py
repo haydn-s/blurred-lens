@@ -94,3 +94,31 @@ def test_too_few_countries_to_size_against(tmp_path):
     write_measured(tmp_path, "pilot", {"NOR": (-1.0, 0.5, 50), "NGA": (1.0, 0.5, 50)})
 
     assert size_run(cfg, "pilot", "cast_b", target=0.95, group_size=12)["places"] == {}
+
+
+def test_averaging_places_is_what_the_budget_should_be_sized_against(tmp_path):
+    """`report` ranks by an index over places, so one place alone overstates what is needed."""
+    cfg = {**CFG, "paths": {**CFG["paths"], "outputs_dir": str(tmp_path)}}
+    # Four countries whose grade is the same in every place, measured with the same noise.
+    per_country = {"NOR": (-1.0, 0.4, 50), "NGA": (1.0, 0.4, 50),
+                   "SGP": (0.6, 0.4, 50), "ETH": (0.1, 0.4, 50)}
+    write_measured(tmp_path, "three", per_country, places=("city", "house", "village"))
+    write_measured(tmp_path, "one", per_country, places=("city",))
+
+    three = size_run(cfg, "three", "cast_b", target=0.95, group_size=12)
+    one = size_run(cfg, "one", "cast_b", target=0.95, group_size=12)
+
+    # Three places cut the noise on the index by about sqrt(3) against a single place...
+    assert three["index"]["index_noise"] == pytest.approx(
+        one["index"]["index_noise"] / 3 ** 0.5, rel=0.05)
+    # ...so they ask for about a third of the images, and far fewer than any one place alone.
+    assert three["index"]["images_needed"] < one["index"]["images_needed"]
+    assert three["index"]["images_needed"] < min(
+        p["images_needed"] for p in three["places"].values())
+
+
+def test_the_index_needs_three_countries_measured_in_common(tmp_path):
+    cfg = {**CFG, "paths": {**CFG["paths"], "outputs_dir": str(tmp_path)}}
+    write_measured(tmp_path, "thin", {"NOR": (-1.0, 0.4, 50), "NGA": (1.0, 0.4, 50)})
+
+    assert size_run(cfg, "thin", "cast_b", target=0.95, group_size=12)["index"] is None
