@@ -184,6 +184,14 @@ permutations = 10000          # label shuffles behind each group comparison's p-
 # `phase2-baseline`. "" = no baseline column; --baseline overrides.
 baseline_run = ""
 
+# Rival explanations held constant when every group test is repeated, naming fields in
+# countries_file. Latitude enters as distance from the equator and rainfall on a log scale, because
+# the gap between 100mm and 200mm of rain changes how a place looks far more than 2,000mm to 2,100mm.
+# Rainfall is here because the phase-2 run found latitude explains almost nothing (1-5%) while the
+# warmest countries were the dry ones, so aridity, not latitude, is the confound to beat.
+# Available: latitude, precipitation_mm, forest_pct, population. [] = no control.
+controls = ["latitude", "precipitation_mm"]
+
 [paths]
 outputs_dir = "outputs"
 site_data_dir = "web/data"

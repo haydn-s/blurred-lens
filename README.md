@@ -82,22 +82,29 @@ that does not move when the set of countries changes. Match the light: report a 
 python -m blurred_lens.report --run phase2-noon --baseline phase2-baseline-noon
 ```
 
-**With latitude held constant.** Near the equator the light really is harsher and warmer, and across
-the world's countries income and latitude are badly confounded (see [Data](#data)). So every group
-test is run twice: on the ranking, and on what is left of it after a straight line in `|latitude|`
-has been taken out. The printed report says how much of the spread latitude alone accounts for, then
-repeats each group table net of it:
+**With climate held constant.** A dry country really does look dustier and a forested one greener, so
+a warmth ranking that tracks income might only be tracking what the place actually looks like. Every
+group test is therefore run twice: on the ranking, and on what is left after a straight-line fit on
+every covariate in `report.controls` has been taken out. The report says how much each one accounts
+for *alone*, so the rival explanation doing the work is visible:
 
 ```
-Latitude, the rival explanation (10 countries):
-  index = -0.0334 × |latitude| +0.892; distance from the equator accounts for 44% of the spread
+Rival explanations (60 countries):
+  |latitude|      alone accounts for   5% of the spread between countries  (slope -0.030)
+  log10 rainfall  alone accounts for  18% of the spread between countries  (slope -1.087)
+  together                           35%
 ```
 
-A group that keeps its gap needs more than latitude to explain it; one that loses it was tracking
-distance from the equator all along. In the pilot, Europe's `p` went from 0.022 to 0.328 under the
-control — which is the control doing its job, and a reminder to read the second table rather than the
-first. It is a straight line, not a climate model: it cannot tell a stereotype from a climate, only
-whether the pattern survives the most obvious confound.
+A group that keeps its gap needs more than climate to explain it; one that loses it was tracking
+climate all along. On the phase-2 run, **Africa's warmth vanished** under the climate controls
+(`d` +0.62 → −0.09) while **Asia's survived and grew** (+0.60 → +0.75, `p`=0.008) — which is the
+control doing its job in both directions.
+
+The controls are fitted on each country's **real** climate, which is what makes the residual
+meaningful: it is "warmer than this country's actual rainfall and latitude warrant", and drawing a
+place drier than it is would show up as signal rather than being absorbed. They are straight lines,
+not a climate model: they cannot tell a stereotype from a climate, only whether the pattern survives
+the most obvious confounds.
 
 ## Image backend: Replicate
 
@@ -300,6 +307,8 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 | `iso_a2`, `iso_a3`, `iso_num` | `US`, `USA`, `840` | folder names (`iso_a3`), map matching (`iso_num`) |
 | `region`, `subregion` | `Americas`, `Northern America` | grouping and analysis |
 | `latitude` | `38.0` | controlling for how far from the equator a country sits |
+| `precipitation_mm` | `715` | holding climate constant: a dry country really does look dustier |
+| `forest_pct` | `33.9` | holding green cover constant — the strongest rival explanation found so far |
 | `population` | `340110988` | a floor on the run's scope, and a proxy for how much the model has seen |
 | `un_status` | `member`, `observer`, `non-member` | filtering |
 
@@ -458,7 +467,8 @@ only thing that changed.
 - [x] Pilot: 10 contrasting countries × 3 places × 50 images under all four conditions ($9.90)
 - [ ] Run the phase-2 matrix (`free`, `noon`, both baselines): 60 countries × 6 places × 84 images
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
-- [x] Report countries as deviations from the baseline run, and control for latitude, in `report`
+- [x] Report countries as deviations from the baseline run, and hold latitude and climate constant
+- [x] Phase 2: 61,488 images over 60 countries × 6 places × 2 conditions, measured and reported
 - [x] `sizing`: pick images per prompt from a pilot's measured noise
 - [ ] Tint the globe by the headline measurement once there is real data to scale it against
 - [ ] Write up: which countries the model grades warmest, whether that survives the light control,

@@ -35,6 +35,7 @@ the shape of the claim the media-studies literature makes about the yellow filte
 
 import argparse
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +44,17 @@ import numpy as np
 from .analyze import analysis_path
 from .config import ROOT, load_config, run_dir
 from .prompts import NO_COUNTRY, load_json
+
+# The covariates a run can hold constant, from data/countries.json. Each is transformed to the
+# quantity that actually matters: distance from the equator rather than signed latitude, and rainfall
+# on a log scale, because the difference between 100mm and 200mm of rain changes how a place looks
+# far more than the difference between 2,000mm and 2,100mm.
+CONTROLS = {
+    "latitude": ("|latitude|", abs),
+    "precipitation_mm": ("log10 rainfall", lambda v: math.log10(max(float(v), 1.0))),
+    "forest_pct": ("forest cover %", float),
+    "population": ("log10 population", lambda v: math.log10(max(float(v), 1.0))),
+}
 
 # How to read each measurement, for the header line of the printed table.
 LABELS = {
@@ -130,35 +142,53 @@ def load_baseline(out: Path, metric: str) -> dict[str, dict[str, float]]:
     return found
 
 
-def straight_line(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
-    """Least-squares slope and intercept of y on x, and the share of y's variance it explains."""
-    slope, intercept = np.polyfit(x, y, 1)
-    predicted = slope * x + intercept
+def least_squares(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
+    """Coefficients of y on `x` (with an intercept column), and the share of y's variance explained."""
+    design = np.column_stack([np.ones(len(y)), x])
+    beta, *_ = np.linalg.lstsq(design, y, rcond=None)
     total = float(((y - y.mean()) ** 2).sum())
-    explained = 0.0 if total == 0 else 1 - float(((y - predicted) ** 2).sum()) / total
-    return float(slope), float(intercept), explained
+    residual = float(((y - design @ beta) ** 2).sum())
+    return beta, (0.0 if total == 0 else 1 - residual / total)
 
 
-def residuals_after(values: dict[str, float], covariate: dict[str, float]) -> tuple[dict[str, float], dict | None]:
-    """Every country's value with a straight-line fit on `covariate` taken out of it.
+def residuals_after(values: dict[str, float],
+                    covariates: dict[str, dict[str, float]]) -> tuple[dict[str, float], dict | None]:
+    """Every country's value with a straight-line fit on every covariate taken out of it.
 
-    This is the whole point of carrying a latitude: near the equator the light really is harsher and
-    warmer, so a warmth ranking that tracks income might only be tracking distance from the equator.
-    Fitting the covariate and keeping the residuals asks the income question again of what latitude
-    leaves unexplained. It is a straight line, not a climate model -- it cannot separate a stereotype
-    from a climate, only say whether the pattern needs more than latitude to describe it.
+    This is what the covariates in data/countries.json are for. Near the equator the light really is
+    harsher and warmer, and a dry country really does look dustier, so a warmth ranking that tracks
+    income might only be tracking distance from the equator or how much it rains. Fitting those and
+    keeping the residuals asks the income question again of what they leave unexplained, and `alone`
+    in the fit says how much each one accounts for by itself, so it is visible which rival
+    explanation is doing the work.
 
-    Returns the values unchanged, and no fit, when there is nothing to fit: fewer than three
-    countries with a covariate, or a covariate that never varies.
+    These are straight lines, not a climate model. They cannot separate a stereotype from a climate,
+    only say whether the pattern needs more than climate to describe it.
+
+    Returns the values unchanged, and no fit, when there is nothing to fit: too few countries
+    carrying every covariate, or a covariate that never varies among them.
     """
-    shared = sorted(set(values) & set(covariate))
-    x = np.array([covariate[iso3] for iso3 in shared], dtype=np.float64)
-    y = np.array([values[iso3] for iso3 in shared], dtype=np.float64)
-    if len(shared) < 3 or x.std() == 0:
+    names = sorted(covariates)
+    shared = sorted(set(values).intersection(*(set(covariates[n]) for n in names))) if names else []
+    if len(shared) < len(names) + 2:
         return dict(values), None
-    slope, intercept, explained = straight_line(x, y)
-    residual = {iso3: float(values[iso3] - (slope * covariate[iso3] + intercept)) for iso3 in shared}
-    return residual, {"slope": slope, "intercept": intercept, "r2": explained, "countries": len(shared)}
+    x = np.array([[covariates[n][iso3] for n in names] for iso3 in shared], dtype=np.float64)
+    y = np.array([values[iso3] for iso3 in shared], dtype=np.float64)
+    if any(x[:, i].std() == 0 for i in range(x.shape[1])):
+        return dict(values), None
+    beta, explained = least_squares(x, y)
+    predicted = np.column_stack([np.ones(len(y)), x]) @ beta
+    return (
+        {iso3: float(y[i] - predicted[i]) for i, iso3 in enumerate(shared)},
+        {
+            "countries": len(shared),
+            "r2": explained,
+            "intercept": float(beta[0]),
+            "terms": {n: float(beta[i + 1]) for i, n in enumerate(names)},
+            # What each covariate accounts for on its own, so the one doing the work is visible.
+            "alone": {n: least_squares(x[:, [i]], y)[1] for i, n in enumerate(names)},
+        },
+    )
 
 
 def place_standings(summaries: dict, metric: str, baseline: dict | None = None) -> dict[str, dict]:
@@ -247,6 +277,8 @@ def build_report(cfg: dict, out: Path, metric: str, permutations: int | None = N
             "region": countries.get(iso3, {}).get("region"),
             "subregion": countries.get(iso3, {}).get("subregion"),
             "latitude": countries.get(iso3, {}).get("latitude"),
+            "precipitation_mm": countries.get(iso3, {}).get("precipitation_mm"),
+            "forest_pct": countries.get(iso3, {}).get("forest_pct"),
             "income": income["labels"].get(income["countries"].get(iso3), None),
             "index": index[iso3],
             "places": places,
@@ -255,11 +287,20 @@ def build_report(cfg: dict, out: Path, metric: str, permutations: int | None = N
             baseline_index[iso3] = float(np.mean(deltas))
             detail[iso3]["baseline_index"] = baseline_index[iso3]
 
-    # Distance from the equator, the rival explanation this ranking has to survive.
-    equator = {iso3: abs(d["latitude"]) for iso3, d in detail.items() if d["latitude"] is not None}
-    net, fit = residuals_after(index, equator)
+    # The rival explanations this ranking has to survive: climate, and anything else recorded.
+    covariates = {}
+    for name in (cfg["report"].get("controls") or []):
+        if name not in CONTROLS:
+            raise SystemExit(f"report.controls: unknown control {name!r}; "
+                             f"choose from {', '.join(CONTROLS)}")
+        transform = CONTROLS[name][1]
+        values = {iso3: transform(countries[iso3][name]) for iso3 in detail
+                  if countries.get(iso3, {}).get(name) is not None}
+        if values:
+            covariates[name] = values
+    net, fit = residuals_after(index, covariates)
     for iso3, value in net.items():
-        detail[iso3]["index_net_of_latitude"] = value
+        detail[iso3]["index_net_of_controls"] = value
 
     groupings = {
         "income": {iso3: d["income"] for iso3, d in detail.items() if d["income"]},
@@ -274,10 +315,10 @@ def build_report(cfg: dict, out: Path, metric: str, permutations: int | None = N
         "places": {name: {k: v for k, v in place.items() if k != "countries"}
                    for name, place in standings.items()},
         "countries": detail,
-        "latitude": fit,
+        "controls": ({**fit, "labels": {n: CONTROLS[n][0] for n in covariates}} if fit else None),
         "groups": {name: group_comparison(index, labels, permutations)
                    for name, labels in groupings.items()},
-        "groups_net_of_latitude": {name: group_comparison(net, labels, permutations)
+        "groups_net_of_controls": {name: group_comparison(net, labels, permutations)
                                    for name, labels in groupings.items()} if fit else {},
     }
 
@@ -293,8 +334,8 @@ def print_report(report: dict, top: int | None = None) -> None:
           + (f" · against the no-country baseline in {versus}" if versus else "") + "\n")
     extra = f"{'vs base':>9}" if versus else ""
     header = (f"{'':>4}  {'country':<22} {'index':>7}{extra}  " + "".join(f"{p:>9}" for p in places))
-    print(header + f"  {'|lat|':>6}  {'income':<20}")
-    print("-" * len(header + "  " + " " * 28))
+    print(header + f"  {'|lat|':>6} {'rain':>6}  {'income':<20}")
+    print("-" * len(header + "  " + " " * 35))
     for rank, (iso3, detail) in enumerate(shown, start=1):
         row = f"{rank:>4}  {detail['name'][:22]:<22} {detail['index']:>+7.2f}"
         if versus:
@@ -302,7 +343,8 @@ def print_report(report: dict, top: int | None = None) -> None:
         row += "  " + "".join(f"{detail['places'][p]['z']:>+9.2f}" if p in detail["places"]
                               else f"{'-':>9}" for p in places)
         lat = f"{abs(detail['latitude']):>6.0f}" if detail.get("latitude") is not None else f"{'-':>6}"
-        print(row + f"  {lat}  {(detail['income'] or '-'):<20}")
+        rain = f"{detail['precipitation_mm']:>6,}" if detail.get("precipitation_mm") else f"{'-':>6}"
+        print(row + f"  {lat} {rain}  {(detail['income'] or '-'):<20}")
 
     print("\nHow much of this is noise?")
     for name, place in report["places"].items():
@@ -324,21 +366,25 @@ def print_report(report: dict, top: int | None = None) -> None:
     for grouping, groups in report["groups"].items():
         print_groups(groups, grouping)
 
-    fit = report.get("latitude")
+    fit = report.get("controls")
     if fit:
-        print(f"\nLatitude, the rival explanation ({fit['countries']} countries):")
-        print(f"  index = {fit['slope']:+.4f} × |latitude| {fit['intercept']:+.3f}; "
-              f"distance from the equator accounts for {fit['r2'] * 100:.0f}% of the spread "
-              f"between countries.")
-        for grouping, groups in report.get("groups_net_of_latitude", {}).items():
-            print_groups(groups, f"{grouping}, with latitude held constant")
-        print("  A group that keeps its gap here needs more than latitude to explain it. One that\n"
-              "  loses it was tracking distance from the equator all along. This is a straight line,\n"
-              "  not a climate model: it cannot tell a stereotype from a climate, only whether the\n"
-              "  pattern survives the most obvious confound.")
+        held = ", ".join(fit["labels"].values())
+        width = max(len(label) for label in fit["labels"].values())
+        print(f"\nRival explanations ({fit['countries']} countries):")
+        for name, label in fit["labels"].items():
+            print(f"  {label:<{width}}  alone accounts for {fit['alone'][name] * 100:>3.0f}% of the "
+                  f"spread between countries  (slope {fit['terms'][name]:+.3f})")
+        if len(fit["labels"]) > 1:
+            print(f"  {'together':<{width}}  {'':18}{fit['r2'] * 100:>3.0f}%")
+        for grouping, groups in report.get("groups_net_of_controls", {}).items():
+            print_groups(groups, f"{grouping}, with {held} held constant")
+        print(f"  A group that keeps its gap here needs more than {held} to explain it. One that\n"
+              f"  loses it was tracking climate all along. These are straight lines, not a climate\n"
+              f"  model: they cannot tell a stereotype from a climate, only whether the pattern\n"
+              f"  survives the most obvious confounds.")
 
     comparisons = sum(len(groups) for groups in report["groups"].values())
-    comparisons += sum(len(groups) for groups in report.get("groups_net_of_latitude", {}).values())
+    comparisons += sum(len(groups) for groups in report.get("groups_net_of_controls", {}).values())
     print(f"\n{comparisons} group comparisons were made. One p-value below 0.05 among that many is "
           "what chance\nlooks like, so read the effect sizes and the noise line above before believing any "
           "of them.")

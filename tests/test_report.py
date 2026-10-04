@@ -147,24 +147,39 @@ def test_a_missing_baseline_says_so_rather_than_reporting_zeroes(measured, tmp_p
 
 # ------------------------------------------------------------------ the latitude control ---------
 
-def test_latitude_is_taken_out_of_a_ranking_that_was_only_latitude():
+def test_a_covariate_is_taken_out_of_a_ranking_that_was_only_that_covariate():
     """Warmth that is exactly distance from the equator must leave nothing behind."""
     equator = {"A": 0.0, "B": 10.0, "C": 20.0, "D": 30.0, "E": 40.0}
     index = {iso3: 2.0 - 0.05 * lat for iso3, lat in equator.items()}
 
-    net, fit = report.residuals_after(index, equator)
+    net, fit = report.residuals_after(index, {"latitude": equator})
 
     assert fit["r2"] == pytest.approx(1.0)
-    assert fit["slope"] == pytest.approx(-0.05)
+    assert fit["terms"]["latitude"] == pytest.approx(-0.05)
+    assert fit["alone"]["latitude"] == pytest.approx(1.0)
     assert all(abs(v) < 1e-9 for v in net.values())
 
 
-def test_a_ranking_unrelated_to_latitude_survives_the_control():
+def test_several_covariates_are_taken_out_together_and_scored_apart():
+    """`alone` is what makes it visible which rival explanation is doing the work."""
+    rain = {"A": 0.0, "B": 1.0, "C": 2.0, "D": 3.0, "E": 4.0}
+    flat = {"A": 1.0, "B": 0.0, "C": 1.0, "D": 0.0, "E": 1.0}  # carries none of the signal
+    index = {iso3: 3.0 - 0.5 * v for iso3, v in rain.items()}
+
+    net, fit = report.residuals_after(index, {"rain": rain, "forest": flat})
+
+    assert fit["alone"]["rain"] == pytest.approx(1.0)
+    assert fit["alone"]["forest"] == pytest.approx(0.0, abs=0.05)
+    assert fit["countries"] == 5
+    assert all(abs(v) < 1e-9 for v in net.values())
+
+
+def test_a_ranking_unrelated_to_the_covariate_survives_the_control():
     """The point of the control is to leave a real pattern standing, not to flatten everything."""
     equator = {"A": 0.0, "B": 10.0, "C": 20.0, "D": 30.0, "E": 40.0}
     index = {"A": 1.0, "B": -1.0, "C": 1.0, "D": -1.0, "E": 1.0}  # alternates, so no slope
 
-    net, fit = report.residuals_after(index, equator)
+    net, fit = report.residuals_after(index, {"latitude": equator})
 
     assert abs(fit["r2"]) < 0.2
     assert np.std(list(net.values())) > 0.8 * np.std(list(index.values()))
@@ -178,7 +193,7 @@ def test_an_income_gap_that_is_really_latitude_disappears_from_the_group_test():
     labels = {"P1": "poor", "P2": "poor", "P3": "poor", "R1": "rich", "R2": "rich", "R3": "rich"}
 
     raw = report.group_comparison(warmth, labels, permutations=500)
-    net, _ = report.residuals_after(warmth, equator)
+    net, _ = report.residuals_after(warmth, {"latitude": equator})
     controlled = report.group_comparison(net, labels, permutations=500)
 
     assert raw["poor"]["mean_index"] > raw["rich"]["mean_index"]      # looks like an income effect
@@ -188,10 +203,12 @@ def test_an_income_gap_that_is_really_latitude_disappears_from_the_group_test():
 
 
 def test_residuals_need_something_to_fit():
-    one_value = {"A": 1.0, "B": 2.0, "C": 3.0}
+    values = {"A": 1.0, "B": 2.0, "C": 3.0}
     flat = {"A": 7.0, "B": 7.0, "C": 7.0}
-    assert report.residuals_after(one_value, flat) == (one_value, None)
-    assert report.residuals_after({"A": 1.0}, {"A": 5.0}) == ({"A": 1.0}, None)
+    assert report.residuals_after(values, {"flat": flat}) == (values, None)   # never varies
+    assert report.residuals_after(values, {}) == (values, None)               # nothing named
+    # One country cannot support a fit with an intercept and a slope.
+    assert report.residuals_after({"A": 1.0}, {"x": {"A": 5.0}}) == ({"A": 1.0}, None)
 
 
 def test_the_report_runs_every_group_test_twice(measured):
@@ -199,6 +216,34 @@ def test_the_report_runs_every_group_test_twice(measured):
 
     built = report.build_report(cfg, out, "cast_b", permutations=200)
 
-    assert built["latitude"]["countries"] == len(COUNTRIES)
-    assert set(built["groups_net_of_latitude"]) == {"income", "region"}
-    assert all("latitude" in d and d["latitude"] is not None for d in built["countries"].values())
+    assert built["controls"]["countries"] == len(COUNTRIES)
+    assert set(built["controls"]["labels"]) == set(cfg["report"]["controls"])
+    assert set(built["groups_net_of_controls"]) == {"income", "region"}
+    for d in built["countries"].values():
+        assert d["latitude"] is not None and d["precipitation_mm"] is not None
+
+
+def test_an_unknown_control_is_refused_rather_than_ignored(measured):
+    """Silently dropping a control would report an uncontrolled result as a controlled one."""
+    cfg, out = measured
+    cfg = {**cfg, "report": {**cfg["report"], "controls": ["altitude"]}}
+
+    with pytest.raises(SystemExit, match="altitude"):
+        report.build_report(cfg, out, "cast_b", permutations=200)
+
+
+def test_rainfall_can_absorb_a_gap_that_latitude_cannot():
+    """The phase-2 result in miniature: dry countries read warm, and latitude does not see it."""
+    # Two groups matched on latitude but not on rainfall; warmth is rainfall and nothing else.
+    equator = {"D1": 10.0, "D2": 30.0, "D3": 50.0, "W1": 10.0, "W2": 30.0, "W3": 50.0}
+    rain = {"D1": 2.0, "D2": 2.1, "D3": 1.9, "W1": 3.3, "W2": 3.2, "W3": 3.4}
+    warmth = {iso3: -2.0 * v for iso3, v in rain.items()}
+    labels = {k: ("dry" if k.startswith("D") else "wet") for k in rain}
+
+    by_latitude, lat_fit = report.residuals_after(warmth, {"latitude": equator})
+    by_rain, rain_fit = report.residuals_after(warmth, {"rain": rain})
+
+    assert lat_fit["r2"] < 0.05                                   # latitude explains nothing
+    assert rain_fit["r2"] == pytest.approx(1.0)                   # rainfall explains all of it
+    assert abs(report.group_comparison(by_latitude, labels, 500)["dry"]["d"]) > 2
+    assert abs(report.group_comparison(by_rain, labels, 500)["dry"]["mean_index"]) < 1e-9
