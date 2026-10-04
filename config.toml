@@ -142,8 +142,13 @@ seed_param = "seed"           # the model input that takes it ("" if the model h
 size = "1024x1024"
 quality = "low"               # openai provider only: gpt-image-* low | medium | high
 images_per_request = 1        # images per request; 1 is required while seed_base is set
-concurrency = 8               # requests in flight at once
-requests_per_minute = 300     # client-side throttle; Replicate allows 600 predictions/min
+# Replicate allows 600 prediction creations a minute. 550 leaves headroom so the run is not fighting
+# rate limits at the ceiling: a 429 is retried and costs no money, but it costs time. Concurrency has
+# to keep up with the throttle or it becomes the real limit -- sustaining R requests a minute at L
+# seconds of round-trip latency needs about R*L/60 in flight, so ~14 at 550/min and 1.5s. The phase-1
+# pilot ran at 291/min against a 300 throttle with 8 in flight, which is that arithmetic holding.
+concurrency = 16              # requests in flight at once
+requests_per_minute = 550     # client-side throttle; Replicate allows 600 predictions/min
 save_format = "jpeg"          # jpeg | webp | png (png is ~6x larger on disk)
 
 # Passed straight through as the model's Replicate input, alongside the prompt. Every model has
