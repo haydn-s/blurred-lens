@@ -118,3 +118,45 @@ def test_the_run_scope_breaks_the_tie_between_income_and_latitude():
     for low, high in ((0, 20), (20, 90)):
         band = [iso3 for iso3 in CFG["prompts"]["countries"] if low <= latitude[iso3] < high]
         assert len({income["countries"][iso3] for iso3 in band}) == 4, (low, high, band)
+
+
+def test_every_country_has_a_population():
+    """A proxy for how much the model has seen of a country, and the floor on the run's scope."""
+    for c in COUNTRIES:
+        assert isinstance(c["population"], int) and c["population"] > 0, c
+
+
+def test_the_run_scope_leaves_out_countries_the_model_can_barely_have_seen():
+    """Micro-states balance latitude beautifully and carry none of the stereotypes in question."""
+    population = {c["iso_a3"]: c["population"] for c in COUNTRIES}
+    too_small = {iso3 for iso3 in CFG["prompts"]["countries"] if population[iso3] < 1_000_000}
+    assert not too_small, too_small
+
+
+def test_the_run_scope_keeps_the_countries_a_reader_will_look_for():
+    """A study of how AI pictures countries that omits the obvious ones answers nobody."""
+    scope = set(CFG["prompts"]["countries"])
+    for iso3 in ("USA", "DEU", "JPN", "BRA", "MEX", "CHN", "IND", "NGA", "EGY", "ETH", "AFG"):
+        assert iso3 in scope, iso3
+
+
+def test_the_run_scope_carries_every_control_it_is_asked_to_hold_constant():
+    """A control with a missing value silently drops that country from the controlled tables."""
+    by_iso = {c["iso_a3"]: c for c in COUNTRIES}
+    for field in CFG["report"]["controls"]:
+        missing = [i for i in CFG["prompts"]["countries"] if by_iso[i].get(field) is None]
+        assert not missing, f"{field} missing for {missing}"
+
+
+def test_aridity_is_rainfall_weighed_against_evaporation_not_rainfall_alone():
+    """500mm is humid in Norway and desert in Sudan, so rainfall alone is not aridity."""
+    by_iso = {c["iso_a3"]: c for c in COUNTRIES}
+    for iso3, c in by_iso.items():
+        if c["aridity_index"] is not None:
+            assert c["aridity_index"] == pytest.approx(
+                c["precipitation_mm"] / (c["temperature_c"] + 10), abs=0.06), iso3
+    # The index must separate places that rainfall alone ranks together.
+    uzb, kaz = by_iso["UZB"], by_iso["KAZ"]
+    assert abs(uzb["precipitation_mm"] - kaz["precipitation_mm"]) < 60   # similar rainfall
+    assert kaz["aridity_index"] > uzb["aridity_index"] * 1.4            # very different aridity
+    assert by_iso["SAU"]["aridity_index"] < 5 < by_iso["NOR"]["aridity_index"]

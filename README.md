@@ -30,9 +30,13 @@ config.toml ─────────┘                               │
 |---|---|---|
 | 1. Generate | `python -m blurred_lens.generate` | Sends every prompt to an image API. One condition at a time, resumable, breadth-first, seeded, logs metadata. |
 | 2. Measure | `python -m blurred_lens.analyze` | Measures color, tone and haze on every image; summarizes each prompt. |
-| 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, and tests the ranking against region and income. |
+| 3. Compare | `python -m blurred_lens.report` | Ranks countries within each place, against the average country and the no-country baseline, and tests the ranking against region and income with latitude held constant. |
 | 4. Export | `python -m blurred_lens.export_site` | Copies sample thumbnails, writes `web/data/manifest.json` (every prompt, measured or not). |
 | 5. View | `python -m http.server --directory web 8000` | The interactive globe at http://localhost:8000 |
+
+`python -m blurred_lens.sizing --run <pilot>` sits beside these rather than in the chain: it reads
+what a pilot measured and says how many images per prompt the comparison needs. See
+[How many images are enough?](#scale-and-budget)
 
 ## Conditions
 
@@ -61,6 +65,54 @@ the model's own default for a city, a village, a house, so each country can be r
 from that default. It has no country dimension: one prompt per place, filed under `_none`, which is
 not an ISO code, so the baseline never enters the country rankings or the globe. `report` has nothing
 to rank in a baseline run and says so; its numbers are in `analysis/_none/<place>.json`.
+
+## Two yardsticks, and the confound
+
+`report` answers the same question twice over, because one answer on its own is misleading.
+
+**Against the average country, and against the model's own default.** A country's z-score says how
+far it sits from the average country, which says who is warmest but not whether the model is doing
+anything unusual to anyone: if every country were graded identically warm, the z-scores would still
+spread out. Pass `--baseline` a run generated with a no-country condition and each country is also
+reported as a deviation from the model's own picture of the same place with no country named — a zero
+that does not move when the set of countries changes. Match the light: report a `noon` run against
+`phase2-baseline-noon`, a `free` one against `phase2-baseline`.
+
+```bash
+python -m blurred_lens.report --run phase2-noon --baseline phase2-baseline-noon
+```
+
+**With climate held constant.** A dry country really does look dustier and a forested one greener, so
+a warmth ranking that tracks income might only be tracking what the place actually looks like. Every
+group test is therefore run twice: on the ranking, and on what is left after a straight-line fit on
+every covariate in `report.controls` has been taken out. The report says how much each one accounts
+for *alone*, so the rival explanation doing the work is visible:
+
+```
+Rival explanations (60 countries):
+  |latitude|        alone accounts for   5% of the spread between countries  (slope -0.004)
+  mean temperature  alone accounts for  25% of the spread between countries  (slope +0.054)
+  log10 rainfall    alone accounts for  18% of the spread between countries  (slope -0.208)
+  forest cover %    alone accounts for  30% of the spread between countries  (slope -0.018)
+  together                             46%
+```
+
+**Rainfall alone is not aridity**: 500mm is humid in Norway and desert in Sudan, because evaporation
+differs. `aridity_index` is De Martonne's `P/(T+10)` — below 5 is arid, above 28 very humid — and it
+correctly separates countries rainfall ranks together (Uzbekistan 206mm → 8.7, semi-arid; Kazakhstan
+250mm → 14.6). Use it as a single interpretable axis, *or* temperature and rainfall separately as
+`report.controls` does by default, but not both: the index is built from the other two.
+
+A group that keeps its gap needs more than climate to explain it; one that loses it was tracking
+climate all along. On the phase-2 run, **Africa's warmth vanished** under the climate controls
+(`d` +0.62 → −0.09) while **Asia's survived and grew** (+0.60 → +0.75, `p`=0.008) — which is the
+control doing its job in both directions.
+
+The controls are fitted on each country's **real** climate, which is what makes the residual
+meaningful: it is "warmer than this country's actual rainfall and latitude warrant", and drawing a
+place drier than it is would show up as signal rather than being absorbed. They are straight lines,
+not a climate model: they cannot tell a stereotype from a climate, only whether the pattern survives
+the most obvious confounds.
 
 ## Image backend: Replicate
 
@@ -123,14 +175,18 @@ and `generate` splits it evenly: every prompt gets the same number of images, as
 buys, so every country and place is measured from the same sample size. Generating the same scope
 under two conditions costs two budgets.
 
-Phase 2 is 48 countries × 3 places = **144 prompts** per country condition, plus 3 for each baseline
+Phase 2 is 60 countries × 6 places = **360 prompts** per country condition, plus 6 for each baseline
 (the baseline has no country dimension). At `$0.003`/image:
 
 | Images per prompt | `free` | `noon` | both baselines | total |
 |---:|---:|---:|---:|---:|
-| 50 | $21.60 | $21.60 | $0.90 | **$44.10** |
-| 100 | $43.20 | $43.20 | $1.80 | **$88.20** |
-| 200 | $86.40 | $86.40 | $3.60 | **$176.40** |
+| 42 | $45.36 | $45.36 | $1.51 | **$92.23** |
+| 84 | $90.72 | $90.72 | $3.02 | **$184.46** |
+| 126 | $136.08 | $136.08 | $4.54 | **$276.70** |
+
+Phase 2 runs at **84**, which the pilot's noise puts at 97% of a real group difference surviving
+under `free` and 99% under `noon`. Images past that buy almost nothing, because a country's index
+already averages six places — which is why the budget went to countries and places instead.
 
 The full scope is 197 countries × 8 place types = **1,576 prompts**. Images per prompt for all 1,576,
 for one condition:
@@ -152,18 +208,33 @@ python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04
 - **Too small a budget is refused:** if it buys fewer than `min_images_per_prompt` (default 20) per
   prompt, `generate` says what that minimum would cost. Narrow the run (`--places`), pick a cheaper
   model, or lower the minimum.
-- **How many images are enough?** Enough that the noise on one country's mean is small against the
-  spread *between* countries — that ratio, not the images themselves, is what the comparison rests on.
-  `report` prints both numbers for every place:
+- **How many images are enough?** Run a pilot and ask `sizing`:
 
-  ```
-  How much of this is noise?
-    city       countries differ by sd 0.412; a single country's mean is measured to ±0.137
+  ```bash
+  python -m blurred_lens.generate --countries NOR,SGP,NGA,ETH,AFG,PRK --n 50
+  python -m blurred_lens.analyze --run phase2-free --min-images 50
+  python -m blurred_lens.sizing  --run phase2-free --target 0.95
   ```
 
-  A country's mean is measured to `sd/√n`, so quadrupling the images halves that `±`. Run a pilot,
-  read those two numbers, and pick the smallest *n* that puts the error well inside the spread —
-  then spend what is left on more countries, which are the unit of the statistical test.
+  What it protects is the *contrast between groups of countries*, not any one country's mean. Noise
+  on each country's mean adds to the real spread between countries, so an effect measured through it
+  comes out attenuated by `sd_true/√(sd_true² + sem²)` — and that is what `sizing` prints, together
+  with the *n* at which the attenuation stops mattering. Sizing instead for "tell any two countries
+  apart" asks for several times more images than the income question needs, which is the wrong thing
+  to spend a budget on.
+
+  **Read the index line, not the per-place table.** `report` ranks by an index averaging a country's
+  z-score over every place, so the noise on it falls as `√(places × images)`: six places at 84 images
+  is exactly as precise as three at 168, and both beat any single place by a wide margin. On the
+  pilot, one place alone asked for 627 images per prompt; the index asked for 143 at three places,
+  and about half that at six. More places are as good as more images **and** widen the claim, so they
+  are the better buy.
+
+  Two corrections it applies, both pushing *n* up: the spread a pilot prints is inflated by the
+  pilot's own noise (`sd_obs² = sd_true² + sem²`), and a pilot picked for contrast spreads wider than
+  the set it stands in for, so its spread is discounted by the ratio of `sd(|latitude|)` over the
+  full scope to `sd(|latitude|)` over the measured countries. A run covering the whole scope is not
+  discounted at all.
 
 ## Setup
 
@@ -244,6 +315,11 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 | `iso_a2`, `iso_a3`, `iso_num` | `US`, `USA`, `840` | folder names (`iso_a3`), map matching (`iso_num`) |
 | `region`, `subregion` | `Americas`, `Northern America` | grouping and analysis |
 | `latitude` | `38.0` | controlling for how far from the equator a country sits |
+| `temperature_c` | `9.5` | mean annual temperature, 1993–2022 (World Bank CCKP) |
+| `precipitation_mm` | `715` | mean annual rainfall (World Bank) |
+| `aridity_index` | `35.9` | De Martonne `P/(T+10)`: rainfall weighed against how fast it evaporates |
+| `forest_pct` | `33.9` | holding green cover constant — the strongest single rival explanation |
+| `population` | `340110988` | a floor on the run's scope, and a proxy for how much the model has seen |
 | `un_status` | `member`, `observer`, `non-member` | filtering |
 
 `prompt_name` exists because grammar and ambiguity change what the model draws:
@@ -263,19 +339,31 @@ latitude is the rival explanation for everything this project measures: near the
 really is harsher and warmer. One degree of precision is plenty — what matters is *distance from the
 equator*, as a covariate the analysis can hold constant.
 
-**Which countries a run covers** is `prompts.countries` in `config.toml`, and for phase 2 that list is
-built for the income question rather than hand-picked. Across the 195 countries with a World Bank
-income group the rich ones sit far from the equator and the poor ones near it — mean |latitude| 37°
-for high income against 14° for low — so "warmer because poorer" and "warmer because nearer the
-equator" would be the same sentence. The phase-2 list is 48 countries, 12 per income group, chosen to
-break that tie: hot high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago,
-Barbados, the UAE, Saudi Arabia) against cool or highland low- and lower-middle-income ones (North
-Korea, Syria, Afghanistan, Mongolia, Kyrgyzstan, Uzbekistan, Nepal, Bolivia, Lesotho, the Ethiopian
-and Rwandan highlands). That leaves the groups nearly level — mean |latitude| 25°, 23°, 23°, 19° from
-high income to low, a 6° spread where the world's is 23° — and puts all four income groups in every
-latitude band, so latitude can be controlled for instead of merely hoped about. `tests/test_data.py`
-holds the list to that standard, so editing it fails loudly rather than quietly re-introducing the
-confound.
+**Which countries a run covers** is `prompts.countries` in `config.toml`: 60 countries, 15 per World
+Bank income group, chosen under three constraints rather than by hand.
+
+- **Income must not stand in for latitude.** Across the 195 countries with an income group the rich
+  ones sit far from the equator and the poor ones near it — mean |latitude| 37° against 14° — so
+  "warmer because poorer" and "warmer because nearer the equator" would be one sentence. Pairing hot
+  high-income countries (Singapore, Panama, Costa Rica, Trinidad and Tobago, the Gulf states) against
+  cool or highland poor ones (North Korea, Syria, Afghanistan, Uzbekistan, the Ethiopian and Rwandan
+  highlands) closes the gap between richest and poorest groups to **9.4°**, and puts all four income
+  groups on both sides of 20° so `report` can hold latitude constant by interpolating rather than
+  extrapolating. Spearman(income rank, |latitude|) is **0.24** here against **0.46** for the world.
+- **The model has to have seen the country.** Every country here has at least a million people.
+  Without that floor the arithmetic prefers tropical micro-states — Nauru, Palau, Tuvalu — which
+  balance latitude perfectly and carry none of the stereotypes this project is about.
+- **A reader has to find the countries they came for.** The United States, Germany, Japan, Norway,
+  Brazil, Mexico, China, India, Nigeria, Egypt, Ethiopia, Afghanistan and North Korea are fixed in
+  the list; the rest were chosen around them.
+
+**Why 60 and not more:** countries are the unit of the statistical test, so power rises with them,
+but the supply of warm rich and cool poor countries runs out. At 72 countries the income–latitude
+correlation climbs to 0.31 and at 84 to 0.40 — close to the world's own 0.46, buying power by giving
+back the thing the design exists to establish.
+
+`tests/test_data.py` holds the list to all three standards, so editing it fails loudly rather than
+quietly re-introducing the confound.
 
 **`data/places.json`**: the `{place}` and `{view}` slots. Each entry has an `id` (folder name), a
 `label` (display), a `phrase` with its article (*a city*, *a rural area*), and a `view` that fixes the
@@ -386,11 +474,13 @@ only thing that changed.
 - [x] Image backend (Replicate), budgeting, and measurement of every image
 - [x] Generation built for the question: a light control, a no-country baseline, a 48-country list
       that separates income from latitude, per-image seeds and a pinned model version
-- [ ] Pilot: a few contrasting countries at ~50 images, then set the sample size from the noise line
-- [ ] Run the phase-2 matrix (`free`, `noon`, and both baselines) at the size the pilot picks
+- [x] Pilot: 10 contrasting countries × 3 places × 50 images under all four conditions ($9.90)
+- [ ] Run the phase-2 matrix (`free`, `noon`, both baselines): 60 countries × 6 places × 84 images
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
+- [x] Report countries as deviations from the baseline run, and hold latitude and climate constant
+- [x] Phase 2: 61,488 images over 60 countries × 6 places × 2 conditions, measured and reported
+- [x] `sizing`: pick images per prompt from a pilot's measured noise
 - [ ] Tint the globe by the headline measurement once there is real data to scale it against
-- [ ] Report countries as deviations from the baseline run, and control for latitude, in `report`
 - [ ] Write up: which countries the model grades warmest, whether that survives the light control,
       and whether it tracks income once latitude is held constant
 - [ ] Widen beyond color: what the model puts in the frame, not only how it lights it
