@@ -213,14 +213,31 @@ def test_residuals_need_something_to_fit():
 
 def test_the_report_runs_every_group_test_twice(measured):
     cfg, out = measured
+    # Five countries cannot support the four controls config.toml asks for by default.
+    cfg = {**cfg, "report": {**cfg["report"], "controls": ["latitude", "forest_pct"]}}
 
     built = report.build_report(cfg, out, "cast_b", permutations=200)
 
     assert built["controls"]["countries"] == len(COUNTRIES)
-    assert set(built["controls"]["labels"]) == set(cfg["report"]["controls"])
+    assert set(built["controls"]["labels"]) == {"latitude", "forest_pct"}
     assert set(built["groups_net_of_controls"]) == {"income", "region"}
     for d in built["countries"].values():
-        assert d["latitude"] is not None and d["precipitation_mm"] is not None
+        for field in ("latitude", "precipitation_mm", "aridity_index", "forest_pct"):
+            assert d[field] is not None
+
+
+def test_more_controls_than_countries_can_carry_are_refused(measured):
+    """Fitting four covariates through five countries would explain anything; better to say nothing."""
+    cfg, out = measured
+    assert len(COUNTRIES) == 5
+    cfg = {**cfg, "report": {**cfg["report"],
+           "controls": ["latitude", "temperature_c", "precipitation_mm", "forest_pct"]}}
+
+    built = report.build_report(cfg, out, "cast_b", permutations=200)
+
+    assert built["controls"] is None
+    assert built["groups_net_of_controls"] == {}
+    assert built["groups"]           # the uncontrolled comparison is still reported
 
 
 def test_an_unknown_control_is_refused_rather_than_ignored(measured):

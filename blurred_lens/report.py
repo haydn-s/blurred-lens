@@ -51,7 +51,9 @@ from .prompts import NO_COUNTRY, load_json
 # far more than the difference between 2,000mm and 2,100mm.
 CONTROLS = {
     "latitude": ("|latitude|", abs),
+    "aridity_index": ("log10 aridity", lambda v: math.log10(max(float(v), 0.1))),
     "precipitation_mm": ("log10 rainfall", lambda v: math.log10(max(float(v), 1.0))),
+    "temperature_c": ("mean temperature", float),
     "forest_pct": ("forest cover %", float),
     "population": ("log10 population", lambda v: math.log10(max(float(v), 1.0))),
 }
@@ -278,6 +280,7 @@ def build_report(cfg: dict, out: Path, metric: str, permutations: int | None = N
             "subregion": countries.get(iso3, {}).get("subregion"),
             "latitude": countries.get(iso3, {}).get("latitude"),
             "precipitation_mm": countries.get(iso3, {}).get("precipitation_mm"),
+            "aridity_index": countries.get(iso3, {}).get("aridity_index"),
             "forest_pct": countries.get(iso3, {}).get("forest_pct"),
             "income": income["labels"].get(income["countries"].get(iso3), None),
             "index": index[iso3],

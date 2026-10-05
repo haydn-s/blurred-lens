@@ -90,10 +90,18 @@ for *alone*, so the rival explanation doing the work is visible:
 
 ```
 Rival explanations (60 countries):
-  |latitude|      alone accounts for   5% of the spread between countries  (slope -0.030)
-  log10 rainfall  alone accounts for  18% of the spread between countries  (slope -1.087)
-  together                           35%
+  |latitude|        alone accounts for   5% of the spread between countries  (slope -0.004)
+  mean temperature  alone accounts for  25% of the spread between countries  (slope +0.054)
+  log10 rainfall    alone accounts for  18% of the spread between countries  (slope -0.208)
+  forest cover %    alone accounts for  30% of the spread between countries  (slope -0.018)
+  together                             46%
 ```
+
+**Rainfall alone is not aridity**: 500mm is humid in Norway and desert in Sudan, because evaporation
+differs. `aridity_index` is De Martonne's `P/(T+10)` — below 5 is arid, above 28 very humid — and it
+correctly separates countries rainfall ranks together (Uzbekistan 206mm → 8.7, semi-arid; Kazakhstan
+250mm → 14.6). Use it as a single interpretable axis, *or* temperature and rainfall separately as
+`report.controls` does by default, but not both: the index is built from the other two.
 
 A group that keeps its gap needs more than climate to explain it; one that loses it was tracking
 climate all along. On the phase-2 run, **Africa's warmth vanished** under the climate controls
@@ -307,8 +315,10 @@ which has no ISO code, uses the common `XK`/`XKX`). Regions follow the UN M49 sc
 | `iso_a2`, `iso_a3`, `iso_num` | `US`, `USA`, `840` | folder names (`iso_a3`), map matching (`iso_num`) |
 | `region`, `subregion` | `Americas`, `Northern America` | grouping and analysis |
 | `latitude` | `38.0` | controlling for how far from the equator a country sits |
-| `precipitation_mm` | `715` | holding climate constant: a dry country really does look dustier |
-| `forest_pct` | `33.9` | holding green cover constant — the strongest rival explanation found so far |
+| `temperature_c` | `9.5` | mean annual temperature, 1993–2022 (World Bank CCKP) |
+| `precipitation_mm` | `715` | mean annual rainfall (World Bank) |
+| `aridity_index` | `35.9` | De Martonne `P/(T+10)`: rainfall weighed against how fast it evaporates |
+| `forest_pct` | `33.9` | holding green cover constant — the strongest single rival explanation |
 | `population` | `340110988` | a floor on the run's scope, and a proxy for how much the model has seen |
 | `un_status` | `member`, `observer`, `non-member` | filtering |
 

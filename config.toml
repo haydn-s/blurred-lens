@@ -189,8 +189,16 @@ baseline_run = ""
 # the gap between 100mm and 200mm of rain changes how a place looks far more than 2,000mm to 2,100mm.
 # Rainfall is here because the phase-2 run found latitude explains almost nothing (1-5%) while the
 # warmest countries were the dry ones, so aridity, not latitude, is the confound to beat.
-# Available: latitude, precipitation_mm, forest_pct, population. [] = no control.
-controls = ["latitude", "precipitation_mm"]
+# The phase-2 run settled which ones matter. Alone, forest cover accounts for 29% of the spread
+# between countries, mean temperature 24%, rainfall 18% and latitude only 5%; these four together
+# reach 46%. Rainfall alone is not aridity -- 500mm is humid in Norway and desert in Sudan -- so
+# temperature and rainfall are both here, which spans aridity without the collinearity of also
+# including the derived aridity_index. That index is available instead as a single interpretable axis
+# (De Martonne, P/(T+10): below 5 is arid, above 28 very humid), but do not use it alongside its own
+# ingredients.
+# Available: latitude, aridity_index, precipitation_mm, temperature_c, forest_pct, population.
+# [] = no control.
+controls = ["latitude", "temperature_c", "precipitation_mm", "forest_pct"]
 
 [paths]
 outputs_dir = "outputs"
