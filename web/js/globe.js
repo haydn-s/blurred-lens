@@ -32,8 +32,15 @@ const COLORS = {
   landUnlisted: "#131a28",
   side: "#0e1524",
   border: "rgba(160, 185, 255, 0.2)",
-  glow: "#7489cf",
-  glowBorder: "rgba(214, 226, 255, 0.85)",
+  // Hover has to say "you are pointing at this", never "this country measured pink". So it sits off
+  // the scale's blue-amber axis entirely -- 83 degrees of hue from the cool pole and 102 from the
+  // warm one -- and above it in lightness: OKLCH L 0.88 against the brightest step's 0.78, which
+  // makes the hovered country the brightest thing on the globe whatever its own tint. Lightness is
+  // what carries that when hue cannot: against all seven steps and both land tones the worst
+  // separation is Delta-E 8.7 under deuteranopia, protanopia and tritanopia. The country also rises
+  // and blooms, so the colour is never the only cue.
+  glow: "#ffbef0",
+  glowBorder: "rgba(255, 233, 250, 0.9)",
   atmosphere: "#4776ff",
 };
 const ALTITUDE = { rest: 0.006, lit: 0.026 };
