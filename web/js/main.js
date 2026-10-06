@@ -3,7 +3,7 @@
 
 import { loadData } from "./data.js";
 import { Gallery } from "./gallery.js";
-import { GlobeView } from "./globe.js";
+import { GlobeView, SCALE } from "./globe.js";
 import { createSearch } from "./search.js";
 import { Tooltip } from "./tooltip.js";
 import { formatCount, isEditable, prefersReducedMotion, wait } from "./util.js";
@@ -37,10 +37,28 @@ function renderHud(manifest, countries) {
   const entries = countries.flatMap((c) => c.entries);
   const done = entries.filter((e) => e.metrics).length;
   const images = entries.reduce((sum, e) => sum + e.n_images, 0);
+  renderLegend(manifest, countries);
   $("#hud-template").textContent = `“${manifest.template}”`;
   $("#hud-stats").textContent =
     `${countries.filter((c) => c.done).length} of ${countries.length} countries · ` +
     `${formatCount(done)} of ${formatCount(entries.length)} prompts · ${formatCount(images)} images`;
+}
+
+// The globe's colour means nothing without the key to it, so the legend ships with the tint.
+function renderLegend(manifest, countries) {
+  const measured = countries.filter((c) => typeof c.index === "number");
+  const label = manifest.metric?.label;
+  if (!measured.length || !label) return; // nothing tinted yet, so nothing to explain
+  $("#legend-title").textContent = label.replace(/\s*\(.*\)$/, "");
+  $("#legend-steps").replaceChildren(
+    ...SCALE.colors.map((color) => {
+      const step = document.createElement("li");
+      step.className = "legend-swatch";
+      step.style.background = color;
+      return step;
+    }),
+  );
+  $("#hud-legend").hidden = false;
 }
 
 async function main() {

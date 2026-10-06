@@ -193,9 +193,14 @@ bare countries warmer -- and Asian countries warmer than their climate accounts 
 > no-country baseline for each. Not one request failed and not one prompt was refused.
 >
 > The findings above come from that run, and are a first pass: the measurements are final, the
-> interpretation is not. **The globe and galleries have not been rebuilt from it yet** -- the images
-> and figures they show are still the synthetic placeholders used to design the site, and will be
-> replaced when `export_site` is next run.
+> interpretation is not.
+>
+> **The globe shows the light-controlled half of it**: every image and figure on this site comes from
+> the `noon` run, where the prompt ends *"at noon under a clear sky with the sun high overhead."* That
+> is the half the comparisons rest on -- under the free prompt the model's own choice of hour drowns
+> the country differences out, so a ranking drawn from it would mostly be showing noise. Each
+> country's tint is its standing on the yellow-blue cast: amber above the average country, blue
+> below, grey in the middle, and unlit for the 137 countries not in this run.
 
 ## Credits
 
