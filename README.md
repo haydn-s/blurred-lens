@@ -9,6 +9,14 @@ every other country's, next to sample images and the exact prompts behind them.
 The question is the one film critics ask about the sepia "Mexico filter": does the model reach for
 warmer, dustier, darker color when the country is poorer?
 
+**The answer so far, from 61,488 images of 60 countries: it reaches for warmer color, but not for
+poorer countries.** 53 of the 60 are warmer than the model's own picture of a place with no country
+named. Which countries it warms is predicted far better by how dry and sparsely vegetated they really
+are than by how poor they are -- forest cover alone accounts for 30% of the differences between
+countries, income for nothing once climate is held constant. What *does* survive every control is
+regional: Asian countries are graded warmer than their climate accounts for, in all six kinds of
+place, while Africa's apparent warmth turns out to be climate. See [What it found](#what-it-found).
+
 Class project for AIPI 590 (Explainable AI), Duke University.
 
 ## Pipeline
@@ -250,6 +258,7 @@ Then pick a model in `config.toml` — see [Image backend](#image-backend-replic
 
 ```bash
 # What would a run do? Condition, prompt count, images, requests, cost, time, disk.
+# Nothing is generated until you answer the confirmation prompt.
 python -m blurred_lens.generate --dry-run
 python -m blurred_lens.generate --dry-run --condition noon
 
@@ -267,9 +276,15 @@ python -m blurred_lens.generate --condition baseline        # -> outputs/phase2-
 python -m blurred_lens.generate --condition baseline_noon   # -> outputs/phase2-baseline-noon
 
 # Everything after generation takes the run folder, one condition at a time.
-python -m blurred_lens.analyze --run phase2-free --min-images 5   # default: prompts with all images
-python -m blurred_lens.report  --run phase2-free                  # --metric haze, lightness, ...
-python -m blurred_lens.export_site --run phase2-free
+python -m blurred_lens.analyze --run phase2-noon --min-images 84  # default: prompts with all images
+python -m blurred_lens.sizing  --run phase2-noon                 # is the sample big enough?
+
+# The comparison. --baseline reads the matching no-country run, so each country is reported as a
+# deviation from the model's own default as well as from the average country.
+python -m blurred_lens.report --run phase2-noon --baseline phase2-baseline-noon
+python -m blurred_lens.report --run phase2-noon --baseline phase2-baseline-noon --metric haze
+
+python -m blurred_lens.export_site --run phase2-noon
 python -m http.server --directory web 8000
 
 python -m pytest
@@ -430,6 +445,51 @@ much like a warm filter. What carries the argument is that the prompt, the camer
 the size are all fixed, so between two countries' pictures of the same place, the country name is the
 only thing that changed.
 
+## What it found
+
+61,488 images: 60 countries × 6 places × 84, generated both free and light-controlled, plus a
+no-country baseline for each. On `cast_b`, the yellow-blue cast over the whole frame, under the
+`noon` light control:
+
+| | |
+|---|---|
+| Warmer than the no-country default | **53 of 60 countries** (only Norway is consistently cooler) |
+| Warmest | Niger, Nigeria, Chad, Mali, **Saudi Arabia**, Somalia, **Kuwait**, India, Bangladesh, Egypt |
+| Coolest | Norway, Australia, Costa Rica, United States, South Africa, North Macedonia |
+
+Saudi Arabia and Kuwait are high-income countries near the top, which is the first sign that poverty
+is not what the warm end has in common. What each rival explanation accounts for on its own, and what
+the group tests do once it is held constant:
+
+| held constant | r² | low income | Africa | Asia |
+|---|---:|---:|---:|---:|
+| nothing | 0% | +0.72 (p=0.018) | +0.62 (p=0.030) | +0.60 (p=0.026) |
+| \|latitude\| | 5% | +0.62 (p=0.041) | +0.47 (p=0.097) | +0.79 (p=0.005) |
+| log rainfall | 18% | +0.73 (p=0.017) | +0.51 (p=0.073) | +0.42 (p=0.114) |
+| mean temperature | 25% | +0.72 (p=0.018) | +0.33 (p=0.228) | +0.88 (p=0.003) |
+| log aridity | 25% | +0.74 (p=0.016) | +0.42 (p=0.128) | +0.45 (p=0.099) |
+| **forest cover %** | **30%** | **+0.48 (p=0.116)** | +0.23 (p=0.404) | +0.44 (p=0.110) |
+| all four defaults | **46%** | +0.52 (p=0.091) | **−0.03 (p=0.919)** | **+0.73 (p=0.011)** |
+
+- **Income does not survive the controls**, and of the four it is **forest cover** that moves it --
+  not dryness, not heat, not latitude. The income gradient was largely standing on how green a
+  country is.
+- **Latitude, which the whole country list was built to defeat, accounts for about 5%.** It was the
+  wrong objection to spend the design on; vegetation was the right one.
+- **Africa's warmth is climate; Asia's is not.** Asia survives every control and holds separately in
+  all six kinds of place (d from +0.51 to +0.63). The largest individual residuals are North Korea
+  +2.31, China +1.55, Nigeria +1.28, India +1.11 -- and North Korea is humid and half-forested, so no
+  part of its climate explains it. Japan is cool in absolute terms (−0.85) yet +0.65 once its own
+  rainfall and forest cover are allowed for.
+- **The light control is what makes any of this visible.** Under the free prompt, climate explains
+  only 10% of the spread between countries against 46% under `noon`, and no group effect survives.
+  The model's own choice of hour was drowning out the country.
+
+Read these with the comparison count in mind: 18 group tests per metric, before and after the
+controls. Only Asia, the Americas, and the upper-middle-income group on haze and lightness are strong
+enough to lean on. Europe here is three countries and Oceania two, because the list was built to
+balance income against latitude rather than to cover regions evenly.
+
 ## Design notes
 
 - **Breadth-first:** requests go out as image 1 of every prompt, then image 2, and so on. If a run stops
@@ -472,15 +532,16 @@ only thing that changed.
 
 - [x] Scaffold: data files, config, generate / measure / compare / export pipeline, tests
 - [x] Image backend (Replicate), budgeting, and measurement of every image
-- [x] Generation built for the question: a light control, a no-country baseline, a 48-country list
-      that separates income from latitude, per-image seeds and a pinned model version
-- [x] Pilot: 10 contrasting countries × 3 places × 50 images under all four conditions ($9.90)
-- [ ] Run the phase-2 matrix (`free`, `noon`, both baselines): 60 countries × 6 places × 84 images
 - [x] Website: 3D globe with hover glow, full-screen gallery, search, deep links
-- [x] Report countries as deviations from the baseline run, and hold latitude and climate constant
-- [x] Phase 2: 61,488 images over 60 countries × 6 places × 2 conditions, measured and reported
-- [x] `sizing`: pick images per prompt from a pilot's measured noise
-- [ ] Tint the globe by the headline measurement once there is real data to scale it against
-- [ ] Write up: which countries the model grades warmest, whether that survives the light control,
-      and whether it tracks income once latitude is held constant
+- [x] Generation built for the question: a light control, a no-country baseline, a 60-country list
+      that separates income from latitude, per-image seeds and a pinned model version
+- [x] Pilot (3,300 images, $9.90), then `sizing` to set the sample from its measured noise
+- [x] Phase 2: 61,488 images, 60 countries × 6 places × 84, both conditions and both baselines,
+      zero failures, $184.46
+- [x] Report each country against the no-country baseline, and hold latitude and climate constant
+- [ ] Rebuild `web/data/` from the phase-2 run (`export_site`), replacing the synthetic placeholders
+- [ ] Tint the globe by the headline measurement, now that there is real data to scale it against
+- [ ] Write up the result: warmth tracks vegetation rather than income, and Asia survives the
+      climate controls while Africa does not
+- [ ] A better climate control than four country averages, to see whether the Asia effect survives it
 - [ ] Widen beyond color: what the model puts in the frame, not only how it lights it
