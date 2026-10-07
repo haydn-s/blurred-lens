@@ -42,7 +42,7 @@ METHOD = [
      "The same places drawn with no country named at all, giving the model's own default."),
     ("Sixty countries, chosen not picked",
      "Fifteen per World Bank income group, all above a million people, selected so income and "
-     "distance from the equator pull apart: \u03c1 = 0.24 here against 0.46 worldwide."),
+     "distance from the equator pull apart: \u03c1 = 0.25 here against 0.49 worldwide."),
     ("Eighty-four images per prompt",
      "Sized from a 3,300-image pilot's measured noise; more countries and places buy more."),
     ("Reproducible by construction",

@@ -369,7 +369,7 @@ Bank income group, chosen under three constraints rather than by hand.
   cool or highland poor ones (North Korea, Syria, Afghanistan, Uzbekistan, the Ethiopian and Rwandan
   highlands) closes the gap between richest and poorest groups to **9.4°**, and puts all four income
   groups on both sides of 20° so `report` can hold latitude constant by interpolating rather than
-  extrapolating. Spearman(income rank, |latitude|) is **0.24** here against **0.46** for the world.
+  extrapolating. Spearman(income rank, |latitude|) is **0.25** here against **0.49** for the world.
 - **The model has to have seen the country.** Every country here has at least a million people.
   Without that floor the arithmetic prefers tropical micro-states — Nauru, Palau, Tuvalu — which
   balance latitude perfectly and carry none of the stereotypes this project is about.
@@ -379,7 +379,7 @@ Bank income group, chosen under three constraints rather than by hand.
 
 **Why 60 and not more:** countries are the unit of the statistical test, so power rises with them,
 but the supply of warm rich and cool poor countries runs out. At 72 countries the income–latitude
-correlation climbs to 0.31 and at 84 to 0.40 — close to the world's own 0.46, buying power by giving
+correlation climbs to 0.31 and at 84 to 0.40 — close to the world's own 0.49, buying power by giving
 back the thing the design exists to establish.
 
 `tests/test_data.py` holds the list to all three standards, so editing it fails loudly rather than

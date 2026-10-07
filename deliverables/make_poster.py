@@ -344,6 +344,37 @@ def check_numbers() -> list[str]:
     total = sum(1 for _ in (ROOT / "outputs").glob("phase2-*/images/*/*/*.jpg"))
     if total != 61488:
         problems.append(f"61,488 images: disk has {total:,}")
+
+    # The income-latitude correlation, with ties sharing a rank. Income has four distinct values,
+    # so nearly every pair is tied and breaking ties by sort order gives a different, wrong answer
+    # -- which is how the poster once came to claim 0.24 against a true 0.25.
+    income = json.loads((ROOT / "data/income_groups.json").read_text())
+    equator = {c["iso_a3"]: abs(c["latitude"])
+               for c in json.loads((ROOT / "data/countries.json").read_text())}
+    order = {"LIC": 0, "LMC": 1, "UMC": 2, "HIC": 3}
+
+    def ranks(values):
+        placed = sorted(range(len(values)), key=lambda i: values[i])
+        out, k = [0.0] * len(values), 0
+        while k < len(placed):
+            j = k
+            while j + 1 < len(placed) and values[placed[j + 1]] == values[placed[k]]:
+                j += 1
+            for t in range(k, j + 1):
+                out[placed[t]] = (k + j) / 2
+            k = j + 1
+        return out
+
+    def rho(codes):
+        xs = ranks([order[income["countries"][i]] for i in codes])
+        ys = ranks([equator[i] for i in codes])
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        num = sum((a - mx) * (b - my) for a, b in zip(xs, ys))
+        den = (sum((a - mx) ** 2 for a in xs) * sum((b - my) ** 2 for b in ys)) ** 0.5
+        return num / den if den else 0.0
+
+    want("rho, this run", rho(cfg["prompts"]["countries"]), 0.25, tol=0.005)
+    want("rho, worldwide", rho([i for i in equator if income["countries"].get(i)]), 0.49, tol=0.005)
     return problems
 
 
