@@ -296,7 +296,12 @@ python -m pytest
 modules from `file://`), e.g. `python -m http.server --directory web 8000`.
 
 - **Globe:** drag to rotate (with inertia), scroll or pinch to zoom; it turns slowly when idle. Hovering
-  a country lifts it with a soft glow; countries whose images have been measured are tinted.
+  a country lifts it with a soft glow. Each measured country is tinted by its standing on the headline
+  measurement — a diverging scale, amber above the average country and blue below, with a neutral grey
+  in the middle and unlit land for countries the run did not cover. The scale is built in OKLCH so the
+  two arms are symmetric (equal lightness at equal distance from the middle, hue alone carrying the
+  sign) and the poles separate by ΔE 25 under protanopia, well past the ΔE 8 a categorical palette
+  needs. `SCALE` in `web/js/globe.js` is the single source for both the globe and its legend.
 - **Gallery:** clicking a country flies the camera there and opens a full-screen gallery with one card per
   place, each showing sample images and how that country compares with the rest on the headline
   measurement. Swipe, scroll, press ← → or pick a tab; Esc or the browser's back button returns to the
@@ -539,8 +544,7 @@ balance income against latitude rather than to cover regions evenly.
 - [x] Phase 2: 61,488 images, 60 countries × 6 places × 84, both conditions and both baselines,
       zero failures, $184.46
 - [x] Report each country against the no-country baseline, and hold latitude and climate constant
-- [ ] Rebuild `web/data/` from the phase-2 run (`export_site`), replacing the synthetic placeholders
-- [ ] Tint the globe by the headline measurement, now that there is real data to scale it against
+- [x] Rebuild `web/data/` from the phase-2 run, and tint the globe by the headline measurement
 - [ ] Write up the result: warmth tracks vegetation rather than income, and Asia survives the
       climate controls while Africa does not
 - [ ] A better climate control than four country averages, to see whether the Asia effect survives it
