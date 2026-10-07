@@ -4,8 +4,26 @@
     {
       "name": "web",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "--directory", "web", "8000"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "--directory",
+        "web",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "poster",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "--directory",
+        "deliverables",
+        "8001"
+      ],
+      "port": 8001
     }
   ]
 }

@@ -158,7 +158,9 @@ def image_grid(run: str, groups: list[list[str]], place: str, index: int, out: P
         for col, iso3 in enumerate(group):
             source = ROOT / "outputs" / run / "images" / iso3 / place / f"{index:04d}.jpg"
             with Image.open(source) as im:
-                top = (im.height - cell_h) // 2
+                # Biased upward rather than centred: the sky carries much of the colour cast, and
+                # the foreground tarmac carries least, so a centred crop throws away the evidence.
+                top = (im.height - cell_h) // 3
                 tile = im.crop((0, top, cell_w, top + cell_h))
                 sheet.paste(tile, (col * (cell_w + gutter), row * (cell_h + gutter)))
     out.parent.mkdir(parents=True, exist_ok=True)
