@@ -1,99 +1,130 @@
 /* Blurred Lens poster — 24in wide by 36in tall, for print.
-   Laid out by the browser rather than by hand, so text wrapping is real instead of estimated.
-   Type is poster type: a 24x36 sheet is read from three or four feet, where a point size is
-   comfortable from roughly size/6 feet away. Nothing here is below 21pt. */
+
+   Laid out by the browser, so text wrapping is real rather than estimated.
+
+   The design has to work from two distances at once: a headline that stops someone across the
+   room, and body text they can read standing in front of it. So the page is banded — a dark
+   masthead, then alternating white and warm grounds — and each band is full-bleed, which gives the
+   page structure a reader can navigate without reading a word. An earlier version was black text
+   on white throughout and read as a document rather than a poster.
+
+   Type is poster type: a point size is comfortable from roughly size/6 feet away, so nothing here
+   is below 21pt and body text is 23-24pt. */
 
 @page { size: 24in 36in; margin: 0; }
 
 :root {
-  --ink: #1a1a1a;
-  --muted: #5f6670;
-  --rule: #d8dce2;
-  --warm: #b07c1f;          /* darkened from the scale's #c2923f to hold up as text on white */
-  --cool: #2f6ca8;
-  --tint: #fbf7ef;
+  --ink: #17191e;
+  --muted: #5c636e;
+  --paper: #ffffff;
+  --warm-ground: #faf5ec;      /* the alternate band */
+  --dark: #17191e;
+  --dark-muted: #a7adb8;
+  --amber: #c8912c;            /* the scale's warm pole, for accents on dark */
+  --amber-ink: #9d6f14;        /* darkened so it holds up as small text on white */
+  --cool-ink: #2f6ca8;
+  --rule: #e2e5ea;
   --head: Cambria, Georgia, serif;
   --body: Calibri, "Segoe UI", sans-serif;
+  --pad: 1.1in;
 }
 
 * { box-sizing: border-box; margin: 0; }
-html, body { margin: 0; background: #5a6069; }
+html, body { margin: 0; background: #4e535c; }
 
 .page {
   width: 24in; height: 36in;
-  padding: 1.1in 1.1in 0.8in;
-  background: #fff; color: var(--ink);
+  background: var(--paper); color: var(--ink);
   font-family: var(--body);
   display: flex; flex-direction: column;
-  overflow: hidden;                 /* so an overflow is visible as a cut, not a longer page */
+  overflow: hidden;
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 
-/* ---- masthead ---- */
-h1 { font: 700 84pt/0.95 var(--head); letter-spacing: -0.01em; }
-.subtitle { font: italic 400 32pt/1.18 var(--head); color: var(--muted); margin-top: 0.1in;
-            max-width: 20in; }
-.byline { font-size: 22pt; color: var(--muted); margin-top: 0.16in; }
-.masthead { border-bottom: 2.5pt solid var(--ink); padding-bottom: 0.2in; }
-
-/* ---- the headline numbers ---- */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.26in; margin-top: 0.34in; }
-.stat { background: var(--tint); border-radius: 0.1in; padding: 0.18in 0.3in 0.2in; }
-.stat b { display: block; font: 700 52pt/1 var(--head); color: var(--warm); }
-.stat span { display: block; font-size: 21pt; color: var(--muted); margin-top: 0.08in;
-             line-height: 1.15; }
-
 /* ---- bands ---- */
-section { margin-top: 0.28in; }
-h2 { font: 700 36pt/1.1 var(--head); margin-bottom: 0.18in; }
-h3 { font: 700 26pt/1.15 var(--head); }
-p  { font-size: 24pt; line-height: 1.3; }
-.two  { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9in; }
-.five { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.3in; }
+.band { padding: 0.25in var(--pad); }
+.band.tint { background: var(--warm-ground); }
+.band.dark { background: var(--dark); color: #fff; }
+.band.flush { padding-top: 0.3in; }
 
-/* ---- numbered process steps ---- */
-.step { display: grid; grid-template-columns: 0.5in 1fr; column-gap: 0.1in; row-gap: 0.1in; }
-.step .n { font: 700 26pt/1.1 var(--head); color: var(--warm); }
-.step h3 { font-size: 25pt; }
-.step p { grid-column: 1 / -1; font-size: 21pt; color: var(--muted); line-height: 1.28; }
+/* ---- masthead ---- */
+.masthead { padding: 0.55in var(--pad) 0.45in; }
+.masthead h1 { font: 700 78pt/0.96 var(--head); letter-spacing: -0.015em; color: #fff; }
+.masthead h1 em { font-style: normal; color: var(--amber); }
+.masthead .subtitle { font: italic 400 30pt/1.18 var(--head); color: #e4e7ec;
+                      margin-top: 0.14in; max-width: 19.5in; }
+.masthead .byline { font-size: 21pt; color: var(--dark-muted); margin-top: 0.16in;
+                    letter-spacing: 0.02em; }
+
+/* ---- the headline numbers, on the dark ---- */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45in;
+         border-top: 1.5pt solid #343842; margin-top: 0.34in; padding-top: 0.3in; }
+.stat b { display: block; font: 700 50pt/1 var(--head); color: var(--amber); }
+.stat span { display: block; font-size: 21pt; color: var(--dark-muted); margin-top: 0.1in;
+             line-height: 1.18; }
+
+/* ---- headings ---- */
+h2 { font: 700 34pt/1.08 var(--head); margin-bottom: 0.17in; }
+h2 .num { color: var(--amber-ink); margin-right: 0.18in; }
+.band.dark h2 { color: #fff; }
+.band.dark h2 .num { color: var(--amber); }
+h3 { font: 700 26pt/1.14 var(--head); }
+p  { font-size: 23pt; line-height: 1.3; }
+
+.two  { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85in; }
+.five { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.34in; align-items: start; }
+
+/* ---- numbered process steps: fixed heading row so every body starts level ---- */
+.step { display: grid; grid-template-rows: auto 1fr; row-gap: 0.1in; }
+.step h3 { font-size: 25pt; min-height: 2.3em; }
+.step h3 .n { color: var(--amber-ink); margin-right: 0.12in; }
+.step p { font-size: 21pt; color: var(--muted); line-height: 1.3; }
 
 /* ---- photographs ---- */
-.strips { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5in; }
-.strip .caption { font-size: 21pt; font-weight: 700; letter-spacing: 0.06em;
+.strips { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5in; margin-top: 0.1in; }
+.strip .caption { font-size: 21pt; font-weight: 700; letter-spacing: 0.07em;
                   text-transform: uppercase; }
-.strip.warm .caption { color: var(--warm); }
-.strip.cool .caption { color: var(--cool); }
-.strip .labels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.07in;
-                 margin-top: 0.08in; }
-.strip .labels div { font: 700 24pt/1.12 var(--head); display: flex; flex-direction: column; }
-.strip.warm .labels em { color: var(--warm); font-style: normal; }
-.strip.cool .labels em { color: var(--cool); font-style: normal; }
+.strip.warm .caption { color: var(--amber-ink); }
+.strip.cool .caption { color: var(--cool-ink); }
+.strip .labels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.06in;
+                 margin-top: 0.1in; }
+.strip .labels div { font: 700 22pt/1.1 var(--head); display: flex; flex-direction: column; }
+.strip.warm .labels em { color: var(--amber-ink); font-style: normal; }
+.strip.cool .labels em { color: var(--cool-ink); font-style: normal; }
 .strip img { display: block; width: 100%; margin-top: 0.1in; }
-.note { font-size: 21pt; color: var(--muted); line-height: 1.28; margin-top: 0.18in; }
+.note { font-size: 21pt; color: var(--muted); line-height: 1.28; margin-top: 0.15in; }
 .note b { color: var(--ink); }
+.band.dark .note { color: var(--dark-muted); }
 
-/* ---- findings, implications, next ---- */
-.points { display: grid; grid-template-columns: 1fr 1fr; gap: 0.24in 0.9in; margin-top: 0.08in; }
-.point { display: grid; grid-template-columns: 0.4in 1fr; column-gap: 0.1in; }
-.point .dot { color: var(--warm); font-size: 21pt; line-height: 1.3; }
-.point h3 { font-size: 25pt; }
-.point p { grid-column: 2; font-size: 22pt; color: var(--muted); line-height: 1.28;
-           margin-top: 0.05in; }
-.point.plain p { grid-column: 2; color: var(--ink); margin-top: 0; font-size: 23pt; }
+/* ---- point lists ---- */
+.points { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2in 0.8in; margin-top: 0.06in; }
+.points.one { grid-template-columns: 1fr; }
+.point { border-left: 3pt solid var(--amber-ink); padding-left: 0.24in; }
+.band.dark .point { border-left-color: var(--amber); }
+.point h3 { font-size: 24pt; }
+.point p { font-size: 21pt; color: var(--muted); line-height: 1.28; margin-top: 0.05in; }
+.band.dark .point h3 { color: #fff; }
+.band.dark .point p { color: var(--dark-muted); }
+.point.plain p { font-size: 22pt; color: var(--ink); margin-top: 0; }
+.band.dark .point.plain p { color: #e9ecf1; }
 
 /* ---- map and bars ---- */
-.mapband { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9in; align-items: start; }
-.mapband img { display: block; width: 88%; margin-top: 0.12in; }
-.bars { margin-top: 0.14in; }
-.bar { display: grid; grid-template-columns: 4.1in 1fr auto; align-items: center;
-       column-gap: 0.16in; margin-bottom: 0.14in; }
+.mapband { display: grid; grid-template-columns: 0.95fr 1fr; gap: 0.7in; align-items: start;
+           margin-top: 0.06in; }
+.mapband img { display: block; width: 100%; margin-top: 0.14in; }
+.bars { margin-top: 0.2in; }
+.bar { display: grid; grid-template-columns: 3.9in 1fr auto; align-items: center;
+       column-gap: 0.18in; margin-bottom: 0.12in; }
 .bar .lab { font-size: 23pt; }
-.bar .track { height: 0.34in; border-radius: 0.17in; background: #c9b68a; }
-.bar:first-child .track { background: var(--warm); }
-.bar .val { font: 700 26pt/1 var(--head); color: var(--muted); }
-.bar:first-child .val { color: var(--warm); }
+.bar .track { height: 0.4in; border-radius: 0.2in; background: #ddcba4; }
+.bar:first-child .track { background: var(--amber-ink); }
+.bar .val { font: 700 27pt/1 var(--head); color: var(--muted); }
+.bar:first-child .val { color: var(--amber-ink); }
 
 /* ---- foot ---- */
-.foot { margin-top: auto; border-top: 1pt solid var(--rule); padding-top: 0.2in;
-        font-size: 22pt; color: var(--muted); }
-hr.thin { border: 0; border-top: 1pt solid var(--rule); margin: 0.3in 0 0; }
+/* The closing band absorbs whatever slack is left, so the leftover never shows as a white stripe.
+   It is marked with a class rather than matched by position: :last-of-type counts every div, and
+   the footer is a div, so it never matched a band at all. */
+.band.grow { flex: 1 1 auto; }
+.foot { background: var(--dark); color: var(--dark-muted);
+        padding: 0.26in var(--pad); font-size: 21pt; }

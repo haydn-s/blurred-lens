@@ -35,7 +35,9 @@ def points(items, plain=False):
     for item in items:
         head, body = item if isinstance(item, tuple) else (None, item)
         cls = "point plain" if plain else "point"
-        parts = [f'<div class="{cls}"><div class="dot">●</div>']
+        # The rule down the left edge is the marker; a bullet as well left a stray tick
+        # floating above every heading.
+        parts = [f'<div class="{cls}">']
         if head:
             parts.append(f"<h3>{e(head)}</h3>")
         parts.append(f"<p>{e(body)}</p></div>")
@@ -55,7 +57,7 @@ def strip(css_class, caption, figure, labels):
 def render() -> str:
     stats = "".join(f"<div class='stat'><b>{e(b)}</b><span>{e(s)}</span></div>" for b, s in C.STATS)
     steps = "".join(
-        f"<div class='step'><div class='n'>{i + 1}</div><h3>{e(h)}</h3><p>{e(b)}</p></div>"
+        f"<div class='step'><h3><span class='n'>{i + 1}</span>{e(h)}</h3><p>{e(b)}</p></div>"
         for i, (h, b) in enumerate(C.PROCESS))
     problem = "".join(f"<p>{e(part)}</p>" for part in C.PROBLEM.split("\n\n"))
     widest = max(v for _, v in C.EXPLAINS)
@@ -63,46 +65,47 @@ def render() -> str:
         f"<div class='bar'><div class='lab'>{e(l)}</div>"
         f"<div class='track' style='width:{v / widest * 100:.1f}%'></div>"
         f"<div class='val'>{v}%</div></div>" for l, v in C.EXPLAINS)
+    # The title's last word takes the accent, so the masthead carries the poster's colour.
+    head, _, tail = C.TITLE.rpartition(" ")
+    title = f"{e(head)} <em>{e(tail)}</em>" if head else f"<em>{e(C.TITLE)}</em>"
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>{e(C.TITLE)} — poster</title>
+<title>{e(C.TITLE)} \u2014 poster</title>
 <link rel="stylesheet" href="poster.css">
 </head><body>
 <div class="page">
 
-  <header class="masthead">
-    <h1>{e(C.TITLE)}</h1>
+  <div class="band dark masthead">
+    <h1>{title}</h1>
     <p class="subtitle">{e(C.SUBTITLE)}</p>
     <p class="byline">{e(C.BYLINE)}</p>
-  </header>
+    <div class="stats">{stats}</div>
+  </div>
 
-  <div class="stats">{stats}</div>
-
-  <section>
-    <h2>{e(C.PROBLEM_HEAD)}</h2>
+  <div class="band">
+    <h2><span class="num">1</span>{e(C.PROBLEM_HEAD)}</h2>
     <div class="two">{problem}</div>
-  </section>
+  </div>
 
-  <section>
-    <h2>{e(C.PROCESS_HEAD)}</h2>
+  <div class="band tint">
+    <h2><span class="num">2</span>{e(C.PROCESS_HEAD)}</h2>
     <div class="five">{steps}</div>
-  </section>
+  </div>
 
-  <section>
-    <h2>{e(C.FINDINGS_HEAD)}</h2>
+  <div class="band">
+    <h2><span class="num">3</span>{e(C.FINDINGS_HEAD)}</h2>
     <h3>{e(C.GRID_CAPTION)}</h3>
-    <div class="strips" style="margin-top:.14in">
+    <div class="strips">
       {strip("warm", "the four it draws warmest", "warm-row.jpg",
              [("Niger", "+1.93"), ("Nigeria", "+1.55"), ("Chad", "+1.46"), ("Mali", "+1.41")])}
       {strip("cool", "the four it draws coolest", "cool-row.jpg",
-             [("Norway", "−1.83"), ("Australia", "−1.73"),
-              ("Costa Rica", "−1.39"), ("South Africa", "−1.38")])}
+             [("Norway", "\u22121.83"), ("Australia", "\u22121.73"),
+              ("Costa Rica", "\u22121.39"), ("South Africa", "\u22121.38")])}
     </div>
     <p class="note"><b>{e(C.GRID_NOTE_HEAD)}</b> &nbsp;{e(C.GRID_NOTE)}</p>
     <div class="points">{points(C.FINDINGS)}</div>
-    <hr class="thin">
-    <div class="mapband" style="margin-top:.3in">
+    <div class="mapband">
       <div>
         <h3>{e(C.MAP_CAPTION)}</h3>
         <img src="figures/world-map.png" alt="">
@@ -114,20 +117,25 @@ def render() -> str:
         <p class="note">{e(C.EXPLAINS_NOTE)}</p>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section>
-    <h2>{e(C.MEANS_HEAD)}</h2>
+  <div class="band dark">
+    <h2><span class="num">4</span>{e(C.MEANS_HEAD)}</h2>
     <div class="points">{points(C.MEANS)}</div>
-  </section>
+  </div>
 
-  <section>
+  <div class="band tint grow">
     <div class="two">
-      <div><h2>{e(C.NEXT_HEAD)}</h2>
-        <div class="points" style="grid-template-columns:1fr">{points(C.NEXT, plain=True)}</div></div>
-      <div><h2>{e(C.LIMITS_HEAD)}</h2><p class="note">{e(C.LIMITS)}</p></div>
+      <div>
+        <h2><span class="num">5</span>{e(C.NEXT_HEAD)}</h2>
+        <div class="points one">{points(C.NEXT, plain=True)}</div>
+      </div>
+      <div>
+        <h2>{e(C.LIMITS_HEAD)}</h2>
+        <p class="note" style="margin-top:0">{e(C.LIMITS)}</p>
+      </div>
     </div>
-  </section>
+  </div>
 
   <div class="foot">{e(C.FOOTER)}</div>
 </div>

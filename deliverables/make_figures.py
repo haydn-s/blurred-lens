@@ -149,7 +149,7 @@ def image_grid(run: str, groups: list[list[str]], place: str, index: int, out: P
     # Cropped to 3:2 rather than left square. On a poster a square strip costs half an inch of
     # page per column for sky and tarmac that carry the same cast as the middle of the frame, and
     # the page is the scarce thing. Centre-cropped, so the horizon stays where the camera put it.
-    cell_w, cell_h, gutter = 1024, 683, 14
+    cell_w, cell_h, gutter = 1024, 1024, 12
     cols = max(len(g) for g in groups)
     width = cols * cell_w + (cols - 1) * gutter
     height = len(groups) * cell_h + (len(groups) - 1) * gutter
@@ -158,11 +158,10 @@ def image_grid(run: str, groups: list[list[str]], place: str, index: int, out: P
         for col, iso3 in enumerate(group):
             source = ROOT / "outputs" / run / "images" / iso3 / place / f"{index:04d}.jpg"
             with Image.open(source) as im:
-                # Biased upward rather than centred: the sky carries much of the colour cast, and
-                # the foreground tarmac carries least, so a centred crop throws away the evidence.
-                top = (im.height - cell_h) // 3
-                tile = im.crop((0, top, cell_w, top + cell_h))
-                sheet.paste(tile, (col * (cell_w + gutter), row * (cell_h + gutter)))
+                # Left square. A 3:2 crop saved half an inch of page per column and cost the sky,
+                # which is where most of the colour cast lives -- a bad trade for the one figure
+                # that has to carry the argument on its own.
+                sheet.paste(im, (col * (cell_w + gutter), row * (cell_h + gutter)))
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out, quality=95, dpi=(DPI, DPI))
     return out

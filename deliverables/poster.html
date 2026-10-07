@@ -5,41 +5,39 @@
 </head><body>
 <div class="page">
 
-  <header class="masthead">
-    <h1>Blurred Lens</h1>
+  <div class="band dark masthead">
+    <h1>Blurred <em>Lens</em></h1>
     <p class="subtitle">Does an AI image model paint poorer countries in warmer colour? 61,488 generated photographs say the honest answer is more interesting than yes.</p>
     <p class="byline">Haydn Stucker  ·  AIPI 590: Explainable AI  ·  Duke University</p>
-  </header>
+    <div class="stats"><div class='stat'><b>61,488</b><span>images generated</span></div><div class='stat'><b>60 × 6</b><span>countries × kinds of place</span></div><div class='stat'><b>53 of 60</b><span>warmer than the model&#x27;s own default</span></div><div class='stat'><b>0</b><span>failures or refusals</span></div></div>
+  </div>
 
-  <div class="stats"><div class='stat'><b>61,488</b><span>images generated</span></div><div class='stat'><b>60 × 6</b><span>countries × kinds of place</span></div><div class='stat'><b>53 of 60</b><span>warmer than the model&#x27;s own default</span></div><div class='stat'><b>0</b><span>failures or refusals</span></div></div>
-
-  <section>
-    <h2>The problem</h2>
+  <div class="band">
+    <h2><span class="num">1</span>The problem</h2>
     <div class="two"><p>Film colours places. A sepia wash over Mexico; dust and amber for “somewhere dangerous.” A yellow filter tells an audience a place is poor, hot and unsafe before a word is spoken.</p><p>Image models learn from pictures like those. If one inherited the habit, every picture it makes of a country carries a quiet judgement — and no single image can show you.</p></div>
-  </section>
+  </div>
 
-  <section>
-    <h2>How we looked</h2>
-    <div class="five"><div class='step'><div class='n'>1</div><h3>Ask everyone the same thing</h3><p>One sentence, one fixed camera, 84 times per prompt.</p></div><div class='step'><div class='n'>2</div><h3>Take away the easy excuse</h3><p>Run it again pinned to noon under a clear sky. The pin names no colour.</p></div><div class='step'><div class='n'>3</div><h3>Give it a zero</h3><p>The same places with no country named — the model&#x27;s own default.</p></div><div class='step'><div class='n'>4</div><h3>Pick countries that disagree</h3><p>15 per income group, so income and latitude pull apart (ρ = 0.25 against 0.49).</p></div><div class='step'><div class='n'>5</div><h3>Make the rivals compete</h3><p>Hold real latitude, temperature, rainfall and forest cover constant. Ask again.</p></div></div>
-  </section>
+  <div class="band tint">
+    <h2><span class="num">2</span>How we looked</h2>
+    <div class="five"><div class='step'><h3><span class='n'>1</span>Ask everyone the same thing</h3><p>One sentence, one fixed camera, 84 times per prompt.</p></div><div class='step'><h3><span class='n'>2</span>Take away the easy excuse</h3><p>Run it again pinned to noon under a clear sky. The pin names no colour.</p></div><div class='step'><h3><span class='n'>3</span>Give it a zero</h3><p>The same places with no country named — the model&#x27;s own default.</p></div><div class='step'><h3><span class='n'>4</span>Pick countries that disagree</h3><p>15 per income group, so income and latitude pull apart (ρ = 0.25 against 0.49).</p></div><div class='step'><h3><span class='n'>5</span>Make the rivals compete</h3><p>Hold real latitude, temperature, rainfall and forest cover constant. Ask again.</p></div></div>
+  </div>
 
-  <section>
-    <h2>What we found</h2>
+  <div class="band">
+    <h2><span class="num">3</span>What we found</h2>
     <h3>Only the country changed</h3>
-    <div class="strips" style="margin-top:.14in">
+    <div class="strips">
       <div class="strip warm"><div class="caption">the four it draws warmest</div><div class="labels"><div>Niger<em>+1.93</em></div><div>Nigeria<em>+1.55</em></div><div>Chad<em>+1.46</em></div><div>Mali<em>+1.41</em></div></div><img src="figures/warm-row.jpg" alt=""></div>
       <div class="strip cool"><div class="caption">the four it draws coolest</div><div class="labels"><div>Norway<em>−1.83</em></div><div>Australia<em>−1.73</em></div><div>Costa Rica<em>−1.39</em></div><div>South Africa<em>−1.38</em></div></div><img src="figures/cool-row.jpg" alt=""></div>
     </div>
-    <p class="note"><b>What you are looking at</b> &nbsp;Image 1 of every prompt uses the same seed, so all eight start from identical noise and the street recedes the same way. The only difference is the country named. Figures are standard deviations from the average country.</p>
-    <div class="points"><div class="point"><div class="dot">●</div><h3>It really does grade countries</h3><p>53 of 60 beat its own no-country default. Norway alone is cooler.</p></div>
-<div class="point"><div class="dot">●</div><h3>But not the poor ones — the dry ones</h3><p>Saudi Arabia and Kuwait are high-income and near the top.</p></div>
-<div class="point"><div class="dot">●</div><h3>Income looks real until climate is held constant</h3><p>d = +0.72 (p = .018) falls to +0.52, no better than chance.</p></div>
-<div class="point"><div class="dot">●</div><h3>Latitude was the wrong confound</h3><p>It accounts for 5%. Forest cover accounts for 30%.</p></div>
-<div class="point"><div class="dot">●</div><h3>Asia survives everything</h3><p>+0.73 (p = .011) after every control, in all six kinds of place. Africa&#x27;s gap vanishes.</p></div></div>
-    <hr class="thin">
-    <div class="mapband" style="margin-top:.3in">
+    <p class="note"><b>What you are looking at</b> &nbsp;Image 1 of every prompt uses the same seed, so all eight start from identical noise and the street recedes the same way. Only the country named differs. Figures are standard deviations from the average country.</p>
+    <div class="points"><div class="point"><h3>It really does grade countries</h3><p>53 of 60 beat its own no-country default. Norway alone is cooler.</p></div>
+<div class="point"><h3>But not the poor ones — the dry ones</h3><p>Saudi Arabia and Kuwait are high-income and near the top.</p></div>
+<div class="point"><h3>Income looks real until climate is held constant</h3><p>d = +0.72 (p = .018) falls to +0.52, no better than chance.</p></div>
+<div class="point"><h3>Latitude was the wrong confound</h3><p>It accounts for 5%. Forest cover accounts for 30%.</p></div>
+<div class="point"><h3>Asia survives everything</h3><p>+0.73 (p = .011) after every control, in all six kinds of place. Africa&#x27;s gap vanishes.</p></div></div>
+    <div class="mapband">
       <div>
-        <h3>Every country, coloured by how the model paints it</h3>
+        <h3>Every country, coloured by its warmth</h3>
         <img src="figures/world-map.png" alt="">
         <p class="note">Amber: warmer than average. Blue: cooler. Pale: not in this run.</p>
       </div>
@@ -49,26 +47,31 @@
         <p class="note">What each rival explanation accounts for alone. Latitude — the confound the country list was built to defeat — was the wrong one.</p>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section>
-    <h2>What it means</h2>
-    <div class="points"><div class="point"><div class="dot">●</div><h3>The intuitive claim is wrong</h3><p>It is not warming poor countries but dry, bare ones — substantially what they look like.</p></div>
-<div class="point"><div class="dot">●</div><h3>“Substantially” is not “entirely”</h3><p>A regional residual outlives every control. North Korea is humid and half forested, and the warmest thing on the map.</p></div>
-<div class="point"><div class="dot">●</div><h3>The method mattered more than the result</h3><p>Naively measured, income was there at p = .018. It did not survive. An audit without that control would have published it.</p></div>
-<div class="point"><div class="dot">●</div><h3>A measurement needs a zero</h3><p>Ranking countries says who is warmest. Only a no-country baseline says whether anyone is warmed at all.</p></div></div>
-  </section>
+  <div class="band dark">
+    <h2><span class="num">4</span>What it means</h2>
+    <div class="points"><div class="point"><h3>The intuitive claim is wrong</h3><p>It is not warming poor countries but dry, bare ones — substantially what they look like.</p></div>
+<div class="point"><h3>“Substantially” is not “entirely”</h3><p>A regional residual outlives every control. North Korea is humid and half forested, and the warmest thing on the map.</p></div>
+<div class="point"><h3>The method mattered more than the result</h3><p>Naively measured, income was there at p = .018. It did not survive. An audit without that control would have published it.</p></div>
+<div class="point"><h3>A measurement needs a zero</h3><p>Ranking countries says who is warmest. Only a no-country baseline says whether anyone is warmed at all.</p></div></div>
+  </div>
 
-  <section>
+  <div class="band tint grow">
     <div class="two">
-      <div><h2>What is next</h2>
-        <div class="points" style="grid-template-columns:1fr"><div class="point plain"><div class="dot">●</div><p>Why Asia? The residual now needs a mechanism.</p></div>
-<div class="point plain"><div class="dot">●</div><p>A better climate measure — four country averages leave 54% unexplained.</p></div>
-<div class="point plain"><div class="dot">●</div><p>Other models and languages: this is one model&#x27;s habit, not the industry&#x27;s.</p></div>
-<div class="point plain"><div class="dot">●</div><p>Content, not just colour: who is in frame and what they are doing.</p></div></div></div>
-      <div><h2>What it cannot show</h2><p class="note">Straight-line controls on four country averages cannot separate a stereotype from a climate, only say whether a pattern needs more than climate to describe it. 18 comparisons per metric: lean on the strongest results only.</p></div>
+      <div>
+        <h2><span class="num">5</span>What is next</h2>
+        <div class="points one"><div class="point plain"><p>Why Asia? The residual now needs a mechanism.</p></div>
+<div class="point plain"><p>A better climate measure — four country averages leave 54% unexplained.</p></div>
+<div class="point plain"><p>Other models and languages: this is one model&#x27;s habit, not the industry&#x27;s.</p></div>
+<div class="point plain"><p>Content, not just colour: who is in frame and what they are doing.</p></div></div>
+      </div>
+      <div>
+        <h2>What it cannot show</h2>
+        <p class="note" style="margin-top:0">Straight-line controls on four country averages cannot separate a stereotype from a climate, only say whether a pattern needs more than climate to describe it. 18 comparisons per metric: lean on the strongest results only.</p>
+      </div>
     </div>
-  </section>
+  </div>
 
   <div class="foot">Every prompt, image and measurement — github.com/haydn-s/blurred-lens  ·  flux-schnell on Replicate, one pinned version  ·  October 2026  ·  $185 of compute</div>
 </div>

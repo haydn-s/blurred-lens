@@ -33,8 +33,8 @@ PROBLEM = (
 
 GRID_CAPTION = "Only the country changed"
 GRID_NOTE_HEAD = "What you are looking at"
-GRID_NOTE = ("Image 1 of every prompt uses the same seed, so all eight start from identical noise "
-             "and the street recedes the same way. The only difference is the country named. "
+GRID_NOTE = ("Image 1 of every prompt uses the same seed, so all eight start from identical "
+             "noise and the street recedes the same way. Only the country named differs. "
              "Figures are standard deviations from the average country.")
 
 PROCESS_HEAD = "How we looked"
@@ -52,7 +52,7 @@ PROCESS = [
 ]
 
 FINDINGS_HEAD = "What we found"
-MAP_CAPTION = "Every country, coloured by how the model paints it"
+MAP_CAPTION = "Every country, coloured by its warmth"
 MAP_NOTE = "Amber: warmer than average. Blue: cooler. Pale: not in this run."
 
 FINDINGS = [
