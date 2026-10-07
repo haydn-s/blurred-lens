@@ -49,6 +49,28 @@ TINT = "FBF7EF"            # the faintest warm wash, for callout cards
 PAPER = "FFFFFF"
 HEAD, BODY = "Cambria", "Calibri"
 
+# Poster type, not slide type. A 24x36 sheet is read from three or four feet, where the rule of
+# thumb is that a point size is comfortable from about size/6 feet away: 24pt at four feet, 40pt at
+# nearly seven. Conference guidance puts body text at 24pt and headings at 36pt or more. The first
+# draft of this poster used a slide deck's sizes -- body 14pt -- on a page 1.8 times a slide's
+# width, which left 92% of its characters below the floor and unreadable at any sane distance.
+# check_type() below fails the build if that happens again.
+T = {
+    "title": 120,      # readable across a room
+    "subtitle": 38,
+    "byline": 22,
+    "stat": 64,
+    "stat-label": 21,
+    "section": 42,     # the headline of each block
+    "sub": 28,         # headings inside a column
+    "body": 24,        # the floor for anything a reader is meant to read
+    "note": 21,       # captions and asides, glanced at from closer
+    "detail": 23,      # secondary prose a reader actually reads: findings, method, limits        # captions and asides, read closer
+    "table": 23,
+    "label": 25,
+}
+TYPE_FLOOR = 21        # nothing on the poster may be smaller
+
 
 def rgb(h): return RGBColor.from_string(h)
 
@@ -161,142 +183,154 @@ class Poster:
 
 # ---- the layout ----------------------------------------------------------------------------
 
-def build(p: Poster) -> None:
-    """Place every element, in inches, on the 24x36 page.
+def wrapped(text: str, width_in: float, size_pt: float, *, bold=False) -> float:
+    """Roughly how tall `text` will be once it wraps, in inches.
 
-    Two bands. The figures run down a wide left column with a narrow column of prose beside them,
-    which keeps the photographs and the map large without letting either eat a third of the page.
-    Below them the poster goes to two equal columns of text.
+    Calibri averages about 0.47 of its point size per character, a little more when bold. This only
+    has to be close: check_layout asserts the result does not collide with anything, and the proof
+    renders the real thing.
     """
-    FIG = 15.2                       # width of the figure column
-    SX = M + FIG + 0.7               # the narrow column beside the figures
+    per_char = size_pt * (0.50 if bold else 0.47) / 72
+    lines = max(1, -(-int(len(text) * per_char / width_in * 100) // 100))
+    return lines * size_pt / 72 * 1.3
+
+
+def build(p: Poster) -> None:
+    """Place every element, in inches, on the 24x36 page."""
+    FIG = 12.7                       # the figure column
+    SX = M + FIG + 0.7               # the prose column beside it
     SW = W - M - SX
     y = M
 
     # --- title ---------------------------------------------------------------------------
-    p.text("title", M, y, W - 2 * M, 1.6, C.TITLE, size=112, font=HEAD, bold=True, leading=0.92)
-    y += 1.58
-    p.text("subtitle", M, y, W - 2 * M - 1.4, 1.35, C.SUBTITLE, size=28, font=HEAD,
-           color=MUTED, leading=1.2, italic=True)
-    y += 1.38
-    p.text("byline", M, y, W - 2 * M, 0.32, C.BYLINE, size=18, color=MUTED)
-    y += 0.52
-    p.rule("rule-title", M, y, W - 2 * M, 0.018, INK)
-    y += 0.4
+    p.text("title", M, y, W - 2 * M, 1.68, C.TITLE, size=T["title"], font=HEAD, bold=True,
+           leading=0.92)
+    y += 1.74
+    p.text("subtitle", M, y, W - 2 * M - 0.6, wrapped(C.SUBTITLE, W - 2 * M - 0.6, T["subtitle"]), C.SUBTITLE, size=T["subtitle"], font=HEAD,
+           color=MUTED, leading=1.18, italic=True)
+    y += wrapped(C.SUBTITLE, W - 2 * M - 0.6, T["subtitle"]) + 0.18
+    p.text("byline", M, y, W - 2 * M, 0.38, C.BYLINE, size=T["byline"], color=MUTED)
+    y += 0.58
+    p.rule("rule-title", M, y, W - 2 * M, 0.02, INK)
+    y += 0.42
 
     # --- the numbers ---------------------------------------------------------------------
-    gap, tile_h = 0.26, 1.34
+    gap, tile_h = 0.26, 1.72
     tile_w = (W - 2 * M - 3 * gap) / 4
     for i, (big, small) in enumerate(C.STATS):
         x = M + i * (tile_w + gap)
         p.card(f"stat-card-{i}", x, y, tile_w, tile_h)
-        p.text(f"stat-big-{i}", x + 0.28, y + 0.15, tile_w - 0.56, 0.66, big,
-               size=46, font=HEAD, bold=True, color=WARM, leading=1.0)
-        p.text(f"stat-small-{i}", x + 0.28, y + 0.84, tile_w - 0.56, 0.42, small,
-               size=14, color=MUTED, leading=1.1)
-    y += tile_h + 0.5
-    band = y                          # the prose column beside the figures starts here
+        p.text(f"stat-big-{i}", x + 0.32, y + 0.2, tile_w - 0.64, 0.84, big,
+               size=T["stat"], font=HEAD, bold=True, color=WARM, leading=1.0)
+        p.text(f"stat-small-{i}", x + 0.32, y + 1.08, tile_w - 0.64, 0.56, small,
+               size=T["stat-label"], color=MUTED, leading=1.15)
+    y += tile_h + 0.42
+    band = y
 
     # --- the photographs -------------------------------------------------------------------
-    p.text("grid-head", M, y, FIG, 0.44, C.GRID_CAPTION, size=26, font=HEAD, bold=True)
-    y += 0.5
+    gh = wrapped(C.GRID_CAPTION, FIG, T["section"], bold=True)
+    p.text("grid-head", M, y, FIG, gh, C.GRID_CAPTION, size=T["section"], font=HEAD, bold=True)
+    y += gh + 0.18
     cell = (FIG - 3 * 0.07) / 4
     rows = (([("Niger", "+1.93"), ("Nigeria", "+1.55"), ("Chad", "+1.46"), ("Mali", "+1.41")],
-             WARM, "the four the model draws warmest", "warm-row.jpg"),
+             WARM, "the four it draws warmest", "warm-row.jpg"),
             ([("Norway", "\u22121.83"), ("Australia", "\u22121.73"),
               ("Costa Rica", "\u22121.39"), ("South Africa", "\u22121.38")],
              COOL, "the four it draws coolest", "cool-row.jpg"))
     for row, (labels, tone, caption, figure) in enumerate(rows):
-        p.text(f"row-caption-{row}", M, y, FIG, 0.28,
-               [(caption.upper(), {"color": tone, "bold": True})], size=14)
-        y += 0.32
+        p.text(f"row-caption-{row}", M, y, FIG, 0.36,
+               [(caption.upper(), {"color": tone, "bold": True})], size=T["note"])
+        y += 0.42
         for i, (name, value) in enumerate(labels):
             x = M + i * (cell + 0.07)
-            p.text(f"label-{row}-{i}", x, y, cell, 0.3,
+            p.text(f"label-{row}-{i}", x, y, cell, 0.42,
                    [(f"{name}  ", {"bold": True, "color": INK}), (value, {"color": tone, "bold": True})],
-                   size=16, font=HEAD)
-        y += 0.33
-        y += p.picture(f"grid-row-{row}", FIGURES / figure, M, y, FIG) + (0.26 if row == 0 else 0)
+                   size=T["label"], font=HEAD)
+        y += 0.46
+        y += p.picture(f"grid-row-{row}", FIGURES / figure, M, y, FIG) + (0.24 if row == 0 else 0)
 
     # prose beside the photographs
     sy = band
-    p.text("question-head", SX, sy, SW, 0.4, "The question", size=24, font=HEAD, bold=True)
-    sy += 0.46
-    p.text("question-body", SX, sy, SW, 3.4, C.QUESTION, size=15, leading=1.3)
-    sy += 3.5
-    p.text("grid-note-head", SX, sy, SW, 0.36, "What you are looking at", size=19,
-           font=HEAD, bold=True)
-    sy += 0.42
-    p.text("grid-note", SX, sy, SW, 3.6, C.GRID_NOTE, size=15, color=MUTED, leading=1.3)
+    p.text("question-head", SX, sy, SW, 0.5, C.QUESTION_HEAD, size=T["sub"], font=HEAD, bold=True)
+    sy += 0.6
+    p.text("question-body", SX, sy, SW, wrapped(C.QUESTION, SW, T["body"]), C.QUESTION, size=T["body"], leading=1.3)
+    sy += wrapped(C.QUESTION, SW, T["body"]) + 0.55
+    p.text("grid-note-head", SX, sy, SW, 0.46, C.GRID_NOTE_HEAD, size=T["sub"], font=HEAD, bold=True)
+    sy += 0.56
+    p.text("grid-note", SX, sy, SW, wrapped(C.GRID_NOTE, SW, T["note"]), C.GRID_NOTE, size=T["note"], color=MUTED, leading=1.3)
 
-    y += 0.55
-
-    # --- the map, with the method in the column beside it --------------------------------
-    p.text("map-head", M, y, FIG, 0.44, C.MAP_CAPTION, size=26, font=HEAD, bold=True)
-    sy = y
-    p.text("map-note", SX, sy + 0.04, SW, 1.2, C.MAP_NOTE, size=14.5, color=MUTED, leading=1.3)
-    sy += 1.35
-    p.text("method-head", SX, sy, SW, 0.4, "How it was measured", size=22, font=HEAD, bold=True)
-    sy += 0.48
-    for i, (head, body) in enumerate(C.METHOD):
-        lines = 1 + (len(head) + len(body) + 2) // 42   # the narrow column wraps sooner
-        p.text(f"method-{i}", SX, sy, SW, lines * 0.215 + 0.04,
-               [(head + "  ", {"bold": True, "color": INK}), (body, {"color": MUTED})],
-               size=13.5, leading=1.22)
-        sy += lines * 0.215 + 0.16
     y += 0.5
+
+    # --- the map, with the method beside it --------------------------------------------------
+    mh = wrapped(C.MAP_CAPTION, FIG, T["section"], bold=True)
+    p.text("map-head", M, y, FIG, mh, C.MAP_CAPTION, size=T["section"], font=HEAD, bold=True)
+    sy = y
+    p.text("map-note", SX, sy + 0.06, SW, wrapped(C.MAP_NOTE, SW, T["note"]), C.MAP_NOTE, size=T["note"], color=MUTED, leading=1.3)
+    sy += wrapped(C.MAP_NOTE, SW, T["note"]) + 0.5
+    p.text("method-head", SX, sy, SW, 0.5, C.METHOD_HEAD, size=T["sub"], font=HEAD, bold=True)
+    sy += 0.6
+    for i, item in enumerate(C.METHOD):
+        h = wrapped(item, SW - 0.3, T["detail"])
+        p.text(f"method-{i}-dot", SX, sy + 0.03, 0.2, 0.3, "\u2022", size=T["note"],
+               color=WARM, bold=True)
+        p.text(f"method-{i}", SX + 0.3, sy, SW - 0.3, h, item, size=T["detail"],
+               color=MUTED, leading=1.28)
+        sy += h + 0.16
+    y += mh + 0.18
     y += p.picture("map", FIGURES / "world-map.png", M, y, FIG)
     y = max(y, sy) + 0.5
 
     # --- table and findings ------------------------------------------------------------------
     left, right = M, M + COL + 0.9
     top = y
-    p.text("table-head", left, y, COL, 0.44, C.TABLE_TITLE, size=26, font=HEAD, bold=True)
-    y += 0.52
+    th = wrapped(C.TABLE_TITLE, COL, T["section"], bold=True)
+    p.text("table-head", left, y, COL, th, C.TABLE_TITLE, size=T["section"], font=HEAD, bold=True)
+    y += th + 0.18
     y += p.table("table", left, y, COL, C.TABLE, [0.30, 0.11, 0.21, 0.19, 0.19],
-                 row_height=0.38, header_height=0.44) + 0.2
-    p.text("table-note", left, y, COL, 1.0, C.TABLE_NOTE, size=13.5, color=MUTED, leading=1.25)
-    left_bottom = y + 0.95
+                 row_height=0.52, header_height=0.58) + 0.26
+    p.text("table-note", left, y, COL, wrapped(C.TABLE_NOTE, COL, T["note"]), C.TABLE_NOTE, size=T["note"], color=MUTED, leading=1.28)
+    left_bottom = y + wrapped(C.TABLE_NOTE, COL, T["note"])
 
     y = top
-    p.text("find-head", right, y, COL, 0.44, "What it found", size=26, font=HEAD, bold=True)
-    y += 0.52
+    p.text("find-head", right, y, COL, th, "What it found", size=T["section"], font=HEAD, bold=True)
+    y += th + 0.18
     for i, (head, body) in enumerate(C.FINDINGS):
-        lines = 1 + len(body) // 86
-        p.text(f"find-{i}-n", right, y + 0.02, 0.4, 0.34, f"{i + 1}",
-               size=18, font=HEAD, bold=True, color=WARM)
-        p.text(f"find-{i}-h", right + 0.42, y, COL - 0.42, 0.3, head, size=17,
+        hh = wrapped(head, COL - 0.6, T["sub"], bold=True)
+        bh = wrapped(body, COL - 0.6, T["detail"])
+        p.text(f"find-{i}-n", right, y + 0.03, 0.5, 0.44, f"{i + 1}",
+               size=T["sub"], font=HEAD, bold=True, color=WARM)
+        p.text(f"find-{i}-h", right + 0.6, y, COL - 0.6, hh, head, size=T["sub"],
                font=HEAD, bold=True)
-        p.text(f"find-{i}-b", right + 0.42, y + 0.33, COL - 0.42, lines * 0.23 + 0.04, body,
-               size=14.5, color=MUTED, leading=1.25)
-        y += 0.33 + lines * 0.23 + 0.26
+        p.text(f"find-{i}-b", right + 0.6, y + hh + 0.06, COL - 0.6, bh, body,
+               size=T["detail"], color=MUTED, leading=1.28)
+        y += hh + bh + 0.34
     right_bottom = y
 
-    # --- what it cannot show, across the foot in two columns ---------------------------------
-    y = max(left_bottom, right_bottom) + 0.25
-    p.rule("rule-foot", M, y, W - 2 * M, 0.012)
-    y += 0.36
-    p.text("limits-head", M, y, W - 2 * M, 0.42, "What it cannot show", size=24,
+    # --- what it cannot show -----------------------------------------------------------------
+    y = max(left_bottom, right_bottom) + 0.3
+    p.rule("rule-foot", M, y, W - 2 * M, 0.014)
+    y += 0.42
+    p.text("limits-head", M, y, W - 2 * M, 0.56, C.LIMITS_HEAD, size=T["section"],
            font=HEAD, bold=True)
-    y += 0.5
+    y += 0.68
     half = (len(C.LIMITS) + 1) // 2
     my = ly = y
     for i, item in enumerate(C.LIMITS):
         column, cy = (left, my) if i < half else (right, ly)
-        lines = 1 + len(item) // 84
-        p.text(f"limit-{i}-dot", column, cy + 0.02, 0.18, 0.26, "\u2022", size=15,
+        h = wrapped(item, COL - 0.3, T["detail"])
+        p.text(f"limit-{i}-dot", column, cy + 0.03, 0.2, 0.3, "\u2022", size=T["note"],
                color=WARM, bold=True)
-        p.text(f"limit-{i}", column + 0.24, cy, COL - 0.24, lines * 0.225 + 0.04, item,
-               size=14, color=MUTED, leading=1.25)
+        p.text(f"limit-{i}", column + 0.3, cy, COL - 0.3, h, item, size=T["detail"],
+               color=MUTED, leading=1.28)
         if i < half:
-            my += lines * 0.225 + 0.17
+            my += h + 0.18
         else:
-            ly += lines * 0.225 + 0.17
+            ly += h + 0.18
 
-    y = max(my, ly) + 0.3
-    p.rule("rule-end", M, y, W - 2 * M, 0.012)
-    p.text("footer", M, y + 0.2, W - 2 * M, 0.36, C.FOOTER, size=14, color=MUTED)
-    p.bottom = y + 0.56
+    y = max(my, ly) + 0.2
+    p.rule("rule-end", M, y, W - 2 * M, 0.014)
+    p.text("footer", M, y + 0.24, W - 2 * M, 0.44, C.FOOTER, size=T["byline"], color=MUTED)
+    p.bottom = y + 0.72
 
 
 # ---- checks -------------------------------------------------------------------------------
@@ -375,6 +409,25 @@ def check_numbers() -> list[str]:
 
     want("rho, this run", rho(cfg["prompts"]["countries"]), 0.25, tol=0.005)
     want("rho, worldwide", rho([i for i in equator if income["countries"].get(i)]), 0.49, tol=0.005)
+    return problems
+
+
+def check_type(p: Poster) -> list[str]:
+    """Nothing on the poster may be set below the floor a reader can take in standing up.
+
+    The first draft of this poster was built with a slide deck's type sizes and left 92% of its
+    characters under 24pt -- comfortable only with your nose against the sheet. This is the guard
+    against repeating that.
+    """
+    problems = []
+    for b in p.boxes:
+        if b.get("kind") == "text":
+            for text, o in b["runs"]:
+                if o["size"] < TYPE_FLOOR:
+                    problems.append(f"{b['name']} is {o['size']}pt, below the {TYPE_FLOOR}pt floor "
+                                    f"(readable only from {o['size'] / 6:.1f} ft)")
+        elif b.get("kind") == "table" and T["table"] < TYPE_FLOOR:
+            problems.append(f"{b['name']} is {T['table']}pt, below the {TYPE_FLOOR}pt floor")
     return problems
 
 
@@ -483,13 +536,14 @@ def main() -> None:
     poster = Poster()
     build(poster)
     layout = check_layout(poster)
+    typography = check_type(poster)
 
-    for label, found in (("numbers", numbers), ("layout", layout)):
+    for label, found in (("numbers", numbers), ("layout", layout), ("type", typography)):
         print(f"  {label}: {'OK' if not found else str(len(found)) + ' problem(s)'}")
         for item in found:
             print(f"    - {item}")
     if args.check:
-        sys.exit(1 if numbers or layout else 0)
+        sys.exit(1 if numbers or layout or typography else 0)
     if numbers:
         sys.exit("\nRefusing to build: the poster's numbers no longer match the run.")
 

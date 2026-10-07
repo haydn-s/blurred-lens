@@ -146,16 +146,21 @@ def image_grid(run: str, groups: list[list[str]], place: str, index: int, out: P
     between one cell and the next is the country named in the sentence -- which is what makes the
     colour difference worth looking at rather than a coincidence of framing.
     """
-    cell, gutter = 1024, 14
+    # Cropped to 3:2 rather than left square. On a poster a square strip costs half an inch of
+    # page per column for sky and tarmac that carry the same cast as the middle of the frame, and
+    # the page is the scarce thing. Centre-cropped, so the horizon stays where the camera put it.
+    cell_w, cell_h, gutter = 1024, 683, 14
     cols = max(len(g) for g in groups)
-    width = cols * cell + (cols - 1) * gutter
-    height = len(groups) * cell + (len(groups) - 1) * gutter
+    width = cols * cell_w + (cols - 1) * gutter
+    height = len(groups) * cell_h + (len(groups) - 1) * gutter
     sheet = Image.new("RGB", (width, height), "white")
     for row, group in enumerate(groups):
         for col, iso3 in enumerate(group):
             source = ROOT / "outputs" / run / "images" / iso3 / place / f"{index:04d}.jpg"
             with Image.open(source) as im:
-                sheet.paste(im, (col * (cell + gutter), row * (cell + gutter)))
+                top = (im.height - cell_h) // 2
+                tile = im.crop((0, top, cell_w, top + cell_h))
+                sheet.paste(tile, (col * (cell_w + gutter), row * (cell_h + gutter)))
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out, quality=95, dpi=(DPI, DPI))
     return out
