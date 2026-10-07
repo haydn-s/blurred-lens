@@ -6,12 +6,12 @@
 # About Blurred Lens
 
 When you ask an AI image model to *"show me a city in Nigeria,"* what does it draw? How does that
-compare with what it draws for *"a city in France,"* or *"a farm in Japan"*?
+compare with what it draws for *"a city in Norway,"* or *"a house in Japan"*?
 
 Blurred Lens asks one image model the same simple question about country after country, collects many
 answers to each question, and measures the color of every one. The result is a kind of blurred lens:
-not any one picture the model made, but the habits behind all of them. So far that is 61,488 images
-of 60 countries.
+not any one picture the model made, but the habits behind all of them. So far that is 61,488 images:
+60 countries, and a set that names no country at all to measure them against.
 
 ## The question
 
@@ -66,6 +66,18 @@ pattern largely dissolves. What does not dissolve is a regional one -- the numbe
 On the globe, click a country to see how its pictures compare, the exact prompt behind each one, and
 some of the individual images the numbers came from.
 
+## How to read the globe
+
+- **Each country's colour is its standing on the headline measurement.** Amber means the model draws
+  it warmer than the average country, blue means cooler, and the grey in the middle means it sits
+  within a third of a standard deviation of the average -- the middle of the pack. The scale is
+  symmetric, so a country two steps into the amber is as far out as one two steps into the blue.
+- **Unlit, slate-coloured land has no images yet.** 137 of the world's countries are not in this run;
+  they are left dark rather than coloured, so "nothing measured" never reads as "average".
+- **Pink is the cursor, not a measurement.** The country under your pointer lifts and glows pale pink.
+  That colour is deliberately off the blue-amber scale and brighter than any step on it, so a
+  highlight can never be mistaken for a reading.
+
 ## How to read a country
 
 - **The figure in σ** says how far this country sits from the average country, measured in
@@ -74,7 +86,7 @@ some of the individual images the numbers came from.
   noon. A country graded a thousand kelvin below the rest is being lit differently by the model.
 - **Haze** rises with dust, smog and lifted blacks -- the look a film reaches for when it wants a
   place to feel hot and tired.
-- **Comparisons stay inside one kind of place.** Cities are compared with cities, never with farms:
+- **Comparisons stay inside one kind of place.** Cities are compared with cities, never with markets:
   places differ in color for reasons that have nothing to do with which country they are in.
 - **"Against the default"** is the same distance measured from the model's picture of that place with
   no country named at all, rather than from the average country. It answers a different question:
@@ -113,9 +125,10 @@ something you have to take on faith from a handful of striking examples.
 - **Ambiguous names are made unambiguous:** *the country of Georgia* rather than the US state,
   *Türkiye* rather than the bird, and *Côte d'Ivoire* and *Cabo Verde* so that "coast" and "cape"
   don't leak into the picture.
-- **Some combinations have no real-world referent,** such as a farm in Vatican City or a village in
-  Singapore. They stay in: what a model does with an impossible request is itself a finding.
+- **Some combinations have no real-world referent,** such as a village in Singapore or a rural area in
+  Bahrain. They stay in: what a model does with a request that has no answer is itself a finding.
 - **Refusals are recorded, not hidden.** When the model declines a prompt, that is part of the result.
+  In this run it never did: all 61,488 images were generated without a single refusal or failure.
 
 ## What it found
 
@@ -142,9 +155,11 @@ the light pinned, plus the no-country baselines. On the yellow-blue cast over th
 - **Africa's warmth is climate. Asia's is not.** Africa's gap disappears completely under the
   controls. Asia's survives everything, holds separately in all six kinds of place, and is the one
   effect in this data that climate cannot account for. The largest individual residuals are North
-  Korea, China, Nigeria, India and Bangladesh -- and North Korea is a humid, half-forested country,
-  so nothing about its climate explains why it is drawn the way it is. Japan is the subtlest case: it
-  is cool in absolute terms, yet warmer than a country that wet and wooded should be.
+  Korea (+2.30), China (+1.55), Nigeria (+1.28), India (+1.12) and Niger (+1.09) -- and North Korea is
+  a humid, half-forested country, so nothing about its climate explains why it is drawn the way it is.
+  Japan is the subtlest case: it is cool in absolute terms (-0.85), yet once its own rainfall and
+  forest cover are allowed for it comes out warm (+0.65) -- warmer than a country that wet and wooded
+  should be.
 
 So the honest headline is not *the model grades poor countries warmer*. It is *the model grades dry,
 bare countries warmer -- and Asian countries warmer than their climate accounts for*.
@@ -167,9 +182,9 @@ bare countries warmer -- and Asian countries warmer than their climate accounts 
   controls use each country's *real* climate, not the drawn one, precisely so that a place rendered
   more barren than it is counts as signal -- but the line between "legitimate content" and "learned
   habit" is a judgement this method cannot make for you.
-- **The groups are not clean.** Income group and world region overlap: most of the upper-middle-income
-  countries here are in the Americas, so an "income" result and a "region" result are hard to tell
-  apart. The regional findings should be read as the more solid of the two.
+- **The groups are not clean.** Income group and world region overlap: six of the fifteen
+  upper-middle-income countries here are in the Americas, so an "income" result and a "region" result
+  are hard to tell apart. The regional findings should be read as the more solid of the two.
 - **The framing is chosen for the model.** Fixing the view makes images comparable, but the model
   never gets to show how it would frame a place on its own.
 - **Color is not content.** These measurements describe light, not what is in the picture: who is
@@ -177,9 +192,10 @@ bare countries warmer -- and Asian countries warmer than their climate accounts 
 - **Many comparisons.** Sixty countries is enough to detect a large effect about three times in four,
   not enough to be confident about a modest one. And each metric is tested against both income and
   region, before and after the controls -- 18 comparisons per metric. At that rate a p-value around
-  0.05 means very little, so only the strongest results here (Asia, the Americas, and the
-  upper-middle-income group on haze and lightness) carry real weight. The report prints its own
-  comparison count for exactly this reason.
+  0.05 means very little, so only a few results here carry real weight: Asia once climate is held
+  constant (p = 0.012), the Americas as measured (p = 0.001, though it fades to 0.076 under the
+  controls), and the upper-middle-income group on haze (p = 0.003) and lightness (p = 0.007). The
+  report prints its own comparison count for exactly this reason.
 - **One region's result rests on three countries.** Europe is represented by three countries in this
   list and Oceania by two, because the list was built to balance income against latitude rather than
   to cover regions evenly. Treat those two rows as decoration.
@@ -193,9 +209,14 @@ bare countries warmer -- and Asian countries warmer than their climate accounts 
 > no-country baseline for each. Not one request failed and not one prompt was refused.
 >
 > The findings above come from that run, and are a first pass: the measurements are final, the
-> interpretation is not. **The globe and galleries have not been rebuilt from it yet** -- the images
-> and figures they show are still the synthetic placeholders used to design the site, and will be
-> replaced when `export_site` is next run.
+> interpretation is not.
+>
+> **The globe shows the light-controlled half of it**: every image and figure on this site comes from
+> the `noon` run, where the prompt ends *"at noon under a clear sky with the sun high overhead."* That
+> is the half the comparisons rest on -- under the free prompt the model's own choice of hour drowns
+> the country differences out, so a ranking drawn from it would mostly be showing noise. Each
+> country's tint is its standing on the yellow-blue cast: amber above the average country, blue
+> below, grey in the middle, and unlit for the 137 countries not in this run.
 
 ## Credits
 

@@ -72,6 +72,23 @@ class Exporter:
         return removed
 
 
+def run_condition(out: Path) -> str | None:
+    """Which condition a run was generated under, from its own prediction log.
+
+    A run folder is the record of what was sent, so the site takes the sentence from the run it is
+    exporting rather than from whatever prompts.condition happens to say now. Otherwise exporting
+    the light-controlled run would advertise the free template beside light-controlled numbers.
+    """
+    path = out / "predictions.jsonl"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                return json.loads(line).get("condition")
+    return None
+
+
 def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
     """Copy web-sized sample images from run folder `out` into `site`; return the manifest and how
     many stale images were removed."""
@@ -80,9 +97,13 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
     report_path = out / "analysis" / "report.json"
     report = json.loads(report_path.read_text()) if report_path.exists() else None
 
-    # The template of prompts.condition: what an ungenerated prompt would say. A prompt that has
-    # been measured replaces this with the sentence generate actually recorded for it.
-    _, template = template_for(cfg)
+    # What an ungenerated prompt would say, in the sentence this run was actually generated with. A
+    # prompt that has been measured replaces it with the text generate recorded for that image.
+    condition = run_condition(out)
+    try:
+        condition, template = template_for(cfg, condition)
+    except ValueError:  # a run generated under a condition since renamed or removed
+        condition, template = template_for(cfg)
     n_samples, thumb = cfg["site"]["samples_per_prompt"], cfg["site"]["thumbnail_size"]
     places = load_json(cfg["prompts"]["places_file"])
     exporter = Exporter(site)
@@ -132,6 +153,7 @@ def build_site_data(cfg: dict, out: Path, site: Path) -> tuple[dict, int]:
 
     manifest = {
         "run": out.name,
+        "condition": condition,
         "template": template,
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "metric": {"name": report["metric"], "label": report["metric_label"]} if report else None,

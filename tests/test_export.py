@@ -127,3 +127,25 @@ def test_images_the_measurements_left_out_are_not_shown(tmp_path):
     entry = country(build_site_data(CFG, out, site)[0], "FRA")["entries"][0]
 
     assert [s["image"].rsplit("/", 1)[1] for s in entry["samples"]] == ["0002.jpg", "0003.jpg"]
+
+
+def test_the_site_shows_the_sentence_the_run_was_generated_with(tmp_path):
+    """Exporting the light-controlled run must not advertise the free template beside its numbers."""
+    out = tmp_path / "run"
+    make_run(out, (180, 40, 40))
+    (out / "predictions.jsonl").write_text(json.dumps({"condition": "noon", "saved": 1}) + "\n")
+
+    manifest, _ = build_site_data(CFG, out, tmp_path / "site")
+
+    assert manifest["condition"] == "noon"
+    assert manifest["template"] == template_for(CFG, "noon")[1]
+    assert manifest["template"] != template_for(CFG, "free")[1]
+
+
+def test_a_run_with_no_prediction_log_falls_back_to_the_configured_condition(tmp_path):
+    out = tmp_path / "run"
+    make_run(out, (180, 40, 40))
+
+    manifest, _ = build_site_data(CFG, out, tmp_path / "site")
+
+    assert manifest["condition"] == CFG["prompts"]["condition"]

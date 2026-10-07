@@ -6,17 +6,41 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { clamp, prefersReducedMotion, wait } from "./util.js";
 
+// A country's tint is its standing on the headline measurement: a diverging scale, because the
+// number has a sign -- how far above or below the average country it sits, in either direction.
+// Blue for cooler, amber for warmer, so the encoding is the thing being measured rather than an
+// arbitrary mapping, with a neutral grey in the middle that reads as "nothing to report".
+//
+// Built from OKLCH so the two arms are symmetric: equal lightness at equal distance from the
+// middle (L 0.53 -> 0.60 -> 0.69 -> 0.78 on both sides), chroma lowest in the middle, hue alone
+// carrying the sign. That symmetry is what stops one direction looking stronger than the other.
+// The poles separate by Delta-E 25 under protanopia and tritanopia, well clear of the 8 the
+// palette validator asks for, and every step clears 3:1 against the ocean behind it.
+//
+// The breaks match the language the About page uses: inside a third of a standard deviation is
+// the middle of the pack, past one and a half is far out.
+export const SCALE = {
+  breaks: [-1.5, -0.9, -0.3, 0.3, 0.9, 1.5], // 7 buckets, symmetric about zero
+  colors: ["#6abcff", "#649fe0", "#6283a6", "#6d6c67", "#957c53", "#c2923f", "#eca92e"],
+};
+
 const COLORS = {
   background: "#04060c",
   ocean: "#070d1b",
   oceanSpecular: "#1e2f55",
   land: "#1b2538",
-  landWithData: "#2d4170",
   landUnlisted: "#131a28",
   side: "#0e1524",
   border: "rgba(160, 185, 255, 0.2)",
-  glow: "#7489cf",
-  glowBorder: "rgba(214, 226, 255, 0.85)",
+  // Hover has to say "you are pointing at this", never "this country measured pink". So it sits off
+  // the scale's blue-amber axis entirely -- 83 degrees of hue from the cool pole and 102 from the
+  // warm one -- and above it in lightness: OKLCH L 0.88 against the brightest step's 0.78, which
+  // makes the hovered country the brightest thing on the globe whatever its own tint. Lightness is
+  // what carries that when hue cannot: against all seven steps and both land tones the worst
+  // separation is Delta-E 8.7 under deuteranopia, protanopia and tritanopia. The country also rises
+  // and blooms, so the colour is never the only cue.
+  glow: "#ffbef0",
+  glowBorder: "rgba(255, 233, 250, 0.9)",
   atmosphere: "#4776ff",
 };
 const ALTITUDE = { rest: 0.006, lit: 0.026 };
@@ -37,9 +61,10 @@ export class GlobeView {
     this.resumeTimer = 0;
 
     const lambert = (color) => new THREE.MeshLambertMaterial({ color });
+    // One material per bucket rather than per country: 7 shared materials, not 60.
+    this.scaleMaterials = SCALE.colors.map(lambert);
     this.materials = {
       land: lambert(COLORS.land),
-      landWithData: lambert(COLORS.landWithData),
       landUnlisted: lambert(COLORS.landUnlisted),
       side: lambert(COLORS.side),
       glow: new THREE.MeshBasicMaterial({ color: COLORS.glow }),
@@ -90,8 +115,11 @@ export class GlobeView {
   }
 
   restingMaterial(shape) {
-    if (!shape.country) return this.materials.landUnlisted;
-    return shape.country.done ? this.materials.landWithData : this.materials.land;
+    if (!shape.country) return this.materials.landUnlisted; // not in the country list at all
+    const { index } = shape.country;
+    // Listed but not generated yet stays unlit, so "no data" never looks like "average".
+    if (!shape.country.done || typeof index !== "number") return this.materials.land;
+    return this.scaleMaterials[SCALE.breaks.filter((edge) => index >= edge).length];
   }
 
   setupLights() {
