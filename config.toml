@@ -23,8 +23,8 @@ condition = "free"
 #   against cool or highland poor ones (North Korea, Syria, Afghanistan, Uzbekistan, the Ethiopian
 #   and Rwandan highlands) closes the gap between the richest and poorest groups to 9.4°, and puts
 #   all four income groups on both sides of 20°, so `report` can hold latitude constant by
-#   interpolating rather than extrapolating. Spearman(income rank, |latitude|) is 0.24 here against
-#   0.46 for the world.
+#   interpolating rather than extrapolating. Spearman(income rank, |latitude|) is 0.25 here against
+#   0.49 for the world.
 #
 #   Countries have to be ones the model has seen. Every country here has at least a million people.
 #   Without that floor the arithmetic prefers tropical micro-states -- Nauru, Palau, Tuvalu -- which
@@ -36,7 +36,7 @@ condition = "free"
 #
 # Why 60 and not more: countries are the unit of the statistical test, so power rises with them, but
 # the supply of warm rich and cool poor countries runs out. At 72 countries the income-latitude
-# correlation climbs to 0.31 and at 84 to 0.40, close to the world's own 0.46 -- buying power by
+# correlation climbs to 0.31 and at 84 to 0.40, close to the world's own 0.49 -- buying power by
 # giving back the thing the design exists to establish. 60 holds the confound at the level of the
 # hand-picked phase-1 list while raising the power to detect a large income effect from 66% to 76%.
 countries = [

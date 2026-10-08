@@ -12,3 +12,5 @@ web/data/
 
 # macOS
 .DS_Store
+deliverables/figures/
+deliverables/.countries-50m.json
