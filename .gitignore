@@ -14,3 +14,7 @@ web/data/
 .DS_Store
 deliverables/figures/
 deliverables/.countries-50m.json
+
+# Office lock files: PowerPoint and Word drop a ~$name beside any document they have open,
+# and a `git add -A` while the poster is open will otherwise commit one.
+~$*
