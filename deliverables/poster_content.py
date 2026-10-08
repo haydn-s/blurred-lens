@@ -61,11 +61,11 @@ FINDINGS = [
     ("But not the poor ones — the dry ones",
      "Saudi Arabia and Kuwait are high-income and near the top."),
     ("Income looks real until climate is held constant",
-     "d = +0.72 (p = .018) falls to +0.52, no better than chance."),
+     "d = +0.72 (p = .02) falls to +0.52, no better than chance."),
     ("Latitude was the wrong confound",
      "It accounts for 5%. Forest cover accounts for 30%."),
     ("Asia survives everything",
-     "+0.73 (p = .011) after every control, in all six kinds of place. Africa's gap vanishes."),
+     "+0.70 (p = .01) after every control, in all six kinds of place. Africa's gap vanishes."),
 ]
 
 EXPLAINS_HEAD = "What accounts for the warmth"
@@ -81,7 +81,7 @@ MEANS = [
      "A regional residual outlives every control. North Korea is humid and half forested, and the "
      "warmest thing on the map."),
     ("The method mattered more than the result",
-     "Naively measured, income was there at p = .018. It did not survive. An audit without "
+     "Naively measured, income was there at p = .02. It did not survive. An audit without "
      "that control would have published it."),
     ("A measurement needs a zero",
      "Ranking countries says who is warmest. Only a no-country baseline says whether anyone is "

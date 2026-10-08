@@ -65,12 +65,12 @@ def check_numbers() -> list[str]:
                             ("temperature_c", 25), ("forest_pct", 30)):
         want(f"{field} alone", alone[field], expected, tol=1.0)
     net = r["groups_net_of_controls"]
-    want("low income, controlled", net["income"]["Low income"]["d"], 0.52, tol=0.03)
-    want("Africa, controlled", net["region"]["Africa"]["d"], -0.03, tol=0.03)
-    want("Asia, controlled", net["region"]["Asia"]["d"], 0.73, tol=0.04)
+    want("low income, controlled", net["income"]["Low income"]["d"], 0.52, tol=0.015)
+    want("Africa, controlled", net["region"]["Africa"]["d"], -0.02, tol=0.015)
+    want("Asia, controlled", net["region"]["Asia"]["d"], 0.70, tol=0.015)
     raw = r["groups"]
-    want("low income, raw", raw["income"]["Low income"]["d"], 0.72, tol=0.03)
-    want("Asia, raw", raw["region"]["Asia"]["d"], 0.60, tol=0.03)
+    want("low income, raw", raw["income"]["Low income"]["d"], 0.72, tol=0.015)
+    want("Asia, raw", raw["region"]["Asia"]["d"], 0.60, tol=0.015)
 
     total = sum(1 for _ in (ROOT / "outputs").glob("phase2-*/images/*/*/*.jpg"))
     if total != 61488:
