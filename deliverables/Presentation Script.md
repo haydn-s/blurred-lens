@@ -2,8 +2,8 @@
 
 Bullets to speak from, not sentences to read out.
 
-**535 spoken words.** At a normal 145 words a minute that is 3 minutes 40, which is deliberate:
-the remaining minute and a bit is for pointing, for the pause at the photographs, and for not
+**495 spoken words.** At a normal 145 words a minute that is 3 minutes 25, which is deliberate:
+the remaining minute and a half is for pointing, for the pause at the photographs, and for not
 rushing. The timings below are paced so no section needs more than about 145 wpm.
 
 Every figure here is one the poster build verifies against the run (`python -m
@@ -162,6 +162,15 @@ forest cover are held constant, and North Korea is humid and half forested.
 Countries are the unit of the statistical test, so more is better for power — but the supply of hot
 rich countries and cool poor ones runs out. Past 60, income and latitude re-entangle and I would be
 buying power by giving back the thing the design exists to establish.
+
+**"With 18 comparisons, isn't a p of .02 meaningless?"**
+Largely, yes, and the poster says so. Each metric is tested against income and region, before and
+after the controls, so a p near .05 carries almost nothing on its own. The income result is exactly
+that kind — which is a second reason it is not a finding, on top of its failing the climate control.
+Asia at p = .012 is one of the few that carries real weight, and I would not rest it on the
+threshold either: it survives four climate controls and holds in all six kinds of place measured
+separately. Sixty countries catches a large effect about three times in four and a modest one not
+reliably at all, so nothing modest here is stated as a claim.
 
 **"Why this model?"**
 Cost. flux-schnell is $0.003 an image, which is what made 61,488 of them affordable on a student
