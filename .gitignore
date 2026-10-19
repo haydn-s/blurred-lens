@@ -8,7 +8,14 @@ __pycache__/
 
 # Generated (large; rebuild with the pipeline -- see README)
 outputs/
-web/data/
+
+# web/data/ is generated too, but it is what GitHub Pages serves, so the part the site reads is
+# committed: rebuilding it needs the images in outputs/, which no clone and no CI run will have.
+# Left out are the export's own cache (sources.json records local paths and mtimes, so it is stale
+# the moment anyone else checks it out) and composites/, a leftover from the composite approach
+# that nothing loads any more.
+web/data/sources.json
+web/data/composites/
 
 # macOS
 .DS_Store

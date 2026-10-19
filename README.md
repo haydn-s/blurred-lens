@@ -6,6 +6,8 @@ prompt, and measures every one of them: how warm the color is, how hazy, how dar
 interactive 3D globe lets people click a country and see how the model's pictures of it compare with
 every other country's, next to sample images and the exact prompts behind them.
 
+**The globe is live at <https://haydn-s.github.io/blurred-lens/>.**
+
 The question is the one film critics ask about the sepia "Mexico filter": does the model reach for
 warmer, dustier, darker color when the country is poorer?
 
@@ -317,9 +319,16 @@ modules from `file://`), e.g. `python -m http.server --directory web 8000`.
 Libraries come from CDNs through the import map in `web/index.html`: [globe.gl](https://globe.gl)
 (bundled by esm.sh), [three.js](https://threejs.org), d3-geo and topojson-client, with country shapes from
 [world-atlas](https://github.com/topojson/world-atlas). The import map gives every module the same copy of
-three.js, so upgrade those versions together. To host the site (e.g. GitHub Pages), publish `web/`
-including `web/data/`, which is gitignored by default. `web/.nojekyll` stops GitHub Pages from converting
-`project_description.md` into HTML; the About page needs the raw Markdown.
+three.js, so upgrade those versions together.
+
+**Hosting:** every push to `main` publishes `web/` to GitHub Pages at
+<https://haydn-s.github.io/blurred-lens/>, through
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml). There is no build step for it to run, so it
+only uploads the folder. That means `web/data/` has to be committed rather than rebuilt in CI -- the
+export reads the generated images in `outputs/`, which are too large for the repository -- so after a new
+run, rebuild it locally with `python -m blurred_lens.export_site --run <run>` and commit what changes.
+`web/.nojekyll` stops GitHub Pages from converting `project_description.md` into HTML; the About page
+needs the raw Markdown.
 
 ## Data
 
@@ -412,7 +421,7 @@ outputs/<run_name>-<condition>/          # gitignored; one folder per model/prom
   analysis/<ISO3>/<place>.json           # every image's measurements, and a summary of each metric
   analysis/index.json                    # what was measured, what was left out and why, and the settings
   analysis/report.json                   # the comparison across countries (written by report)
-web/data/                                # gitignored; rebuilt by export_site
+web/data/                                # written by export_site; committed, since Pages serves it
 ```
 
 `predictions.jsonl` is deliberately separate from the image metadata: it describes the API call -- which
@@ -545,6 +554,7 @@ balance income against latitude rather than to cover regions evenly.
       zero failures, $184.46
 - [x] Report each country against the no-country baseline, and hold latitude and climate constant
 - [x] Rebuild `web/data/` from the phase-2 run, and tint the globe by the headline measurement
+- [x] Publish the globe on GitHub Pages at <https://haydn-s.github.io/blurred-lens/>
 - [ ] Write up the result: warmth tracks vegetation rather than income, and Asia survives the
       climate controls while Africa does not
 - [ ] A better climate control than four country averages, to see whether the Asia effect survives it
