@@ -1,0 +1,46 @@
+# Publishes web/ to GitHub Pages on every push to main.
+#
+# There is nothing to build: the site's libraries come from CDNs through the import map in
+# web/index.html, so this workflow only uploads the folder as it stands. web/data/ is committed
+# rather than rebuilt here because building it reads the 61,488 generated images in outputs/,
+# which are far too large to keep in the repository and cost real money to generate again. After a
+# new run, rebuild it locally and commit the result:
+#
+#     python -m blurred_lens.export_site --run phase2-noon
+name: Deploy website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# deploy-pages needs id-token to prove to Pages that the artifact was built by this workflow.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one half-way: an interrupted deploy can leave the site
+# serving part of an upload.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # enablement turns Pages on for the repository the first time this runs, so the site
+      # needs no click in Settings; after that it is a no-op.
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v5
