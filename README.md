@@ -324,7 +324,9 @@ three.js, so upgrade those versions together.
 **Hosting:** every push to `main` publishes `web/` to GitHub Pages at
 <https://haydn-s.github.io/blurred-lens/>, through
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml). There is no build step for it to run, so it
-only uploads the folder. That means `web/data/` has to be committed rather than rebuilt in CI -- the
+only uploads the folder. Pages itself was switched on once by hand, under *Settings → Pages → Build and
+deployment → Source: GitHub Actions*; neither a personal access token nor the workflow's own
+`GITHUB_TOKEN` is allowed to create a Pages site, so a fork has to do that click too. That means `web/data/` has to be committed rather than rebuilt in CI -- the
 export reads the generated images in `outputs/`, which are too large for the repository -- so after a new
 run, rebuild it locally with `python -m blurred_lens.export_site --run <run>` and commit what changes.
 `web/.nojekyll` stops GitHub Pages from converting `project_description.md` into HTML; the About page
