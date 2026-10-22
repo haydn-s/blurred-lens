@@ -1,4 +1,4 @@
-// Full-screen gallery of one country's composite images: a card per place, scroll-snapped
+// Full-screen gallery of one country's sample images: a card per place, scroll-snapped
 // horizontally, driven by swipe, wheel, keyboard, arrow buttons or the place tabs.
 
 import { el, formatCount, prefersReducedMotion } from "./util.js";
@@ -87,7 +87,7 @@ export class Gallery {
       const frame = el("div", { class: "card-frame" });
       const count = el("span", { class: "card-count" });
       if (entry.metrics) {
-        // No composite any more: the frame shows a few of the images the numbers came from.
+        // The frame shows a few of the images the numbers came from.
         frame.append(el("div", { class: "card-grid" },
           ...entry.samples.slice(0, 4).map((s) =>
             el("img", { src: `data/${s.image}`, alt: `One of the images generated for “${entry.prompt}”`,

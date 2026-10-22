@@ -25,3 +25,7 @@ deliverables/.countries-50m.json
 # Office lock files: PowerPoint and Word drop a ~$name beside any document they have open,
 # and a `git add -A` while the poster is open will otherwise commit one.
 ~$*
+
+# Private to the author: speaking notes for the in-class talk, and local editor/agent settings.
+deliverables/Presentation Script.md
+.claude/

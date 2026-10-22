@@ -44,7 +44,7 @@ function renderHud(manifest, countries) {
     `${formatCount(done)} of ${formatCount(entries.length)} prompts · ${formatCount(images)} images`;
 }
 
-// The globe's colour means nothing without the key to it, so the legend ships with the tint.
+// The globe's color means nothing without the key to it, so the legend ships with the tint.
 function renderLegend(manifest, countries) {
   const measured = countries.filter((c) => typeof c.index === "number");
   const label = manifest.metric?.label;

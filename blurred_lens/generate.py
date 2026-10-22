@@ -138,8 +138,8 @@ def run_cost(have: list[int], n_per_prompt: int, price: float) -> float:
 def images_within_budget(have: list[int], cap: int, price: float, budget: float) -> int:
     """The most images per prompt, up to `cap`, that a run can reach without costing more than `budget`.
 
-    Every prompt gets the same number, so each country and place gets a composite and the composites
-    stay comparable. A larger budget later tops every prompt up to a new, higher number.
+    Every prompt gets the same number, so every country and place is measured from the same sample
+    size. A larger budget later tops every prompt up to a new, higher number.
     """
     n = 0
     while n < cap and run_cost(have, n + 1, price) <= budget + 1e-9:
