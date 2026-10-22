@@ -38,7 +38,7 @@ const COLORS = {
   // makes the hovered country the brightest thing on the globe whatever its own tint. Lightness is
   // what carries that when hue cannot: against all seven steps and both land tones the worst
   // separation is Delta-E 8.7 under deuteranopia, protanopia and tritanopia. The country also rises
-  // and blooms, so the colour is never the only cue.
+  // and blooms, so the color is never the only cue.
   glow: "#ffbef0",
   glowBorder: "rgba(255, 233, 250, 0.9)",
   atmosphere: "#4776ff",

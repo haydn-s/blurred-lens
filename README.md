@@ -15,11 +15,13 @@ warmer, dustier, darker color when the country is poorer?
 poorer countries.** 53 of the 60 are warmer than the model's own picture of a place with no country
 named. Which countries it warms is predicted far better by how dry and sparsely vegetated they really
 are than by how poor they are -- forest cover alone accounts for 30% of the differences between
-countries, income for nothing once climate is held constant. What *does* survive every control is
-regional: Asian countries are graded warmer than their climate accounts for, in all six kinds of
-place, while Africa's apparent warmth turns out to be climate. See [What it found](#what-it-found).
+countries, and the income gap stops being significant once climate is held constant. What *does*
+survive every control is regional: Asian countries are graded warmer than their climate accounts
+for, in all six kinds of place, while Africa's apparent warmth turns out to be climate. See
+[What it found](#what-it-found).
 
-Class project for AIPI 590 (Explainable AI), Duke University.
+By Haydn Stucker, as a class project for AIPI 590 (Explainable AI) at Duke University, Fall 2026.
+The conference poster is [`deliverables/Poster Presentation.pdf`](deliverables/Poster%20Presentation.pdf).
 
 ## Pipeline
 
@@ -115,7 +117,7 @@ correctly separates countries rainfall ranks together (Uzbekistan 206mm → 8.7,
 
 A group that keeps its gap needs more than climate to explain it; one that loses it was tracking
 climate all along. On the phase-2 run, **Africa's warmth vanished** under the climate controls
-(`d` +0.62 → −0.09) while **Asia's survived and grew** (+0.60 → +0.75, `p`=0.008) — which is the
+(`d` +0.62 → −0.02) while **Asia's survived and grew** (+0.60 → +0.70, `p`=0.012) — which is the
 control doing its job in both directions.
 
 The controls are fitted on each country's **real** climate, which is what makes the residual
@@ -248,6 +250,8 @@ python -m blurred_lens.generate --dry-run --budget 1000 --prices 0.003,0.01,0.04
 
 ## Setup
 
+Python 3.12 or newer (developed and tested on 3.13), with [uv](https://docs.astral.sh/uv/):
+
 ```bash
 uv venv .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -324,13 +328,13 @@ three.js, so upgrade those versions together.
 **Hosting:** every push to `main` publishes `web/` to GitHub Pages at
 <https://haydn-s.github.io/blurred-lens/>, through
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml). There is no build step for it to run, so it
-only uploads the folder. Pages itself was switched on once by hand, under *Settings → Pages → Build and
-deployment → Source: GitHub Actions*; neither a personal access token nor the workflow's own
-`GITHUB_TOKEN` is allowed to create a Pages site, so a fork has to do that click too. That means `web/data/` has to be committed rather than rebuilt in CI -- the
+only uploads the folder. That means `web/data/` has to be committed rather than rebuilt in CI -- the
 export reads the generated images in `outputs/`, which are too large for the repository -- so after a new
 run, rebuild it locally with `python -m blurred_lens.export_site --run <run>` and commit what changes.
-`web/.nojekyll` stops GitHub Pages from converting `project_description.md` into HTML; the About page
-needs the raw Markdown.
+Pages itself was switched on once by hand, under *Settings → Pages → Build and deployment → Source:
+GitHub Actions*; neither a personal access token nor the workflow's own `GITHUB_TOKEN` is allowed to
+create a Pages site, so a fork has to do that click too. `web/.nojekyll` stops GitHub Pages from
+converting `project_description.md` into HTML; the About page needs the raw Markdown.
 
 ## Data
 
@@ -403,7 +407,7 @@ straight down the street*). Every place added means 197 more prompts.
 
 The view is what makes one prompt's images comparable pixel by pixel. With the camera in the same
 place, the road, the horizon and the buildings land in about the same part of every frame, so the
-composite shows what the model puts there rather than a blur of different framings. The views pin
+measurements compare what the model puts there rather than a mix of different framings. The views pin
 down geometry only (eye level, where the camera stands, where it looks); time of day, weather, people
 and buildings are left to the model. This is a research decision too: the model no longer chooses the
 framing, only what fills it.
@@ -434,7 +438,7 @@ questions can be answered without reopening every image's record.
 rewrite is part of how the model sees a place. Refusals are logged instead of retried forever: which
 prompts get refused is data too. `returned_size` records the size the model actually sent back: every
 image is saved at `generation.size`, and anything else is center-cropped and resized first, so a model
-that quietly ignores the requested size shows up in the metadata instead of in the composites.
+that quietly ignores the requested size shows up in the metadata instead of in the measurements.
 
 ## What is measured
 
@@ -479,13 +483,16 @@ the group tests do once it is held constant:
 
 | held constant | r² | low income | Africa | Asia |
 |---|---:|---:|---:|---:|
-| nothing | 0% | +0.72 (p=0.018) | +0.62 (p=0.030) | +0.60 (p=0.026) |
-| \|latitude\| | 5% | +0.62 (p=0.041) | +0.47 (p=0.097) | +0.79 (p=0.005) |
-| log rainfall | 18% | +0.73 (p=0.017) | +0.51 (p=0.073) | +0.42 (p=0.114) |
-| mean temperature | 25% | +0.72 (p=0.018) | +0.33 (p=0.228) | +0.88 (p=0.003) |
-| log aridity | 25% | +0.74 (p=0.016) | +0.42 (p=0.128) | +0.45 (p=0.099) |
-| **forest cover %** | **30%** | **+0.48 (p=0.116)** | +0.23 (p=0.404) | +0.44 (p=0.110) |
-| all four defaults | **46%** | +0.52 (p=0.091) | **−0.03 (p=0.919)** | **+0.73 (p=0.011)** |
+| nothing | 0% | +0.72 (p=0.020) | +0.62 (p=0.026) | +0.60 (p=0.028) |
+| \|latitude\| | 5% | +0.62 (p=0.042) | +0.47 (p=0.090) | +0.79 (p=0.005) |
+| log rainfall | 18% | +0.73 (p=0.018) | +0.51 (p=0.069) | +0.42 (p=0.118) |
+| mean temperature | 25% | +0.72 (p=0.019) | +0.33 (p=0.231) | +0.88 (p=0.002) |
+| log aridity | 25% | +0.74 (p=0.016) | +0.42 (p=0.124) | +0.45 (p=0.103) |
+| **forest cover %** | **30%** | **+0.48 (p=0.115)** | +0.22 (p=0.426) | +0.43 (p=0.109) |
+| all four defaults | **46%** | +0.52 (p=0.091) | **−0.02 (p=0.956)** | **+0.70 (p=0.012)** |
+
+Each row is `report --run phase2-noon --baseline phase2-baseline-noon` with `report.controls` set to
+that covariate alone; the last is the default.
 
 - **Income does not survive the controls**, and of the four it is **forest cover** that moves it --
   not dryness, not heat, not latitude. The income gradient was largely standing on how green a
@@ -493,8 +500,8 @@ the group tests do once it is held constant:
 - **Latitude, which the whole country list was built to defeat, accounts for about 5%.** It was the
   wrong objection to spend the design on; vegetation was the right one.
 - **Africa's warmth is climate; Asia's is not.** Asia survives every control and holds separately in
-  all six kinds of place (d from +0.51 to +0.63). The largest individual residuals are North Korea
-  +2.31, China +1.55, Nigeria +1.28, India +1.11 -- and North Korea is humid and half-forested, so no
+  all six kinds of place (d from +0.57 to +0.83). The largest individual residuals are North Korea
+  +2.30, China +1.55, Nigeria +1.28, India +1.12 -- and North Korea is humid and half-forested, so no
   part of its climate explains it. Japan is cool in absolute terms (−0.85) yet +0.65 once its own
   rainfall and forest cover are allowed for.
 - **The light control is what makes any of this visible.** Under the free prompt, climate explains
@@ -561,3 +568,30 @@ balance income against latitude rather than to cover regions evenly.
       climate controls while Africa does not
 - [ ] A better climate control than four country averages, to see whether the Asia effect survives it
 - [ ] Widen beyond color: what the model puts in the frame, not only how it lights it
+
+## Poster
+
+[`deliverables/Poster Presentation.pdf`](deliverables/Poster%20Presentation.pdf) is the 24 × 36 inch
+conference poster, and the `.pptx` beside it carries the same page. Both are generated, not drawn by
+hand: `poster_content.py` holds the words, `make_poster_html.py` lays them out and renders the PDF
+with headless Chrome, and `make_poster.py` wraps the render into the `.pptx`. Every number on the
+poster is read back out of the run before anything is written, so a claim that has drifted from the
+data fails the build:
+
+```bash
+python -m deliverables.make_poster --check
+```
+
+## Credits and license
+
+Images were generated with [FLUX.1 \[schnell\]](https://replicate.com/black-forest-labs/flux-schnell)
+by Black Forest Labs, through Replicate. Income groups, rainfall, forest cover and population come
+from the [World Bank](https://data.worldbank.org/) (CC BY 4.0); mean temperature from the World
+Bank's [Climate Change Knowledge Portal](https://climateknowledgeportal.worldbank.org/); country
+centroids from [Google's canonical country list](https://developers.google.com/public-data/docs/canonical/countries_csv);
+ISO codes from [`pycountry`](https://pypi.org/project/pycountry/); country shapes from
+[Natural Earth](https://www.naturalearthdata.com/) via [world-atlas](https://github.com/topojson/world-atlas).
+The globe is built with [globe.gl](https://globe.gl) and [three.js](https://threejs.org).
+
+The code, data files and generated images in this repository are released under the
+[Apache License 2.0](LICENSE).

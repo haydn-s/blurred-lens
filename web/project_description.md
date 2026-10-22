@@ -68,14 +68,14 @@ some of the individual images the numbers came from.
 
 ## How to read the globe
 
-- **Each country's colour is its standing on the headline measurement.** Amber means the model draws
+- **Each country's color is its standing on the headline measurement.** Amber means the model draws
   it warmer than the average country, blue means cooler, and the grey in the middle means it sits
   within a third of a standard deviation of the average -- the middle of the pack. The scale is
   symmetric, so a country two steps into the amber is as far out as one two steps into the blue.
-- **Unlit, slate-coloured land has no images yet.** 137 of the world's countries are not in this run;
-  they are left dark rather than coloured, so "nothing measured" never reads as "average".
+- **Unlit, slate-colored land has no images yet.** 137 of the world's countries are not in this run;
+  they are left dark rather than colored, so "nothing measured" never reads as "average".
 - **Pink is the cursor, not a measurement.** The country under your pointer lifts and glows pale pink.
-  That colour is deliberately off the blue-amber scale and brighter than any step on it, so a
+  That color is deliberately off the blue-amber scale and brighter than any step on it, so a
   highlight can never be mistaken for a reading.
 
 ## How to read a country
@@ -220,7 +220,14 @@ bare countries warmer -- and Asian countries warmer than their climate accounts 
 
 ## Credits
 
-Blurred Lens is a class project for AIPI 590: Explainable AI at Duke University. Country shapes come
+Blurred Lens is by Haydn Stucker, a class project for AIPI 590: Explainable AI at Duke University.
+The images were generated with [FLUX.1 \[schnell\]](https://replicate.com/black-forest-labs/flux-schnell)
+by Black Forest Labs, on Replicate. Income groups, rainfall, forest cover and population come from
+the [World Bank](https://data.worldbank.org/), and mean temperature from the World Bank's
+[Climate Change Knowledge Portal](https://climateknowledgeportal.worldbank.org/). Country shapes come
 from [Natural Earth](https://www.naturalearthdata.com/) via
 [world-atlas](https://github.com/topojson/world-atlas), and the globe is built with
 [globe.gl](https://globe.gl) and [three.js](https://threejs.org).
+
+The code, data and images are released under the
+[Apache License 2.0](https://github.com/haydn-s/blurred-lens/blob/main/LICENSE).
